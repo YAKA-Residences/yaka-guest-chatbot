@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>YAKA Guest Assistant</title>
+
+  <style>
+    :root{
+      --yaka-red: #7a1315;
+      --yaka-grey: #cececd;
+      --yaka-dark: #161616;
+
+      --card: rgba(22,22,22,0.78);
+      --card-border: rgba(206,206,205,0.18);
+      --text: var(--yaka-grey);
+      --muted: rgba(206,206,205,0.75);
+      --shadow: 0 18px 45px rgba(0,0,0,0.45);
+
+      --input-bg: rgba(206,206,205,0.08);
+      --input-border: rgba(206,206,205,0.22);
+
+      --me-bg: rgba(206,206,205,0.10);
+      --me-border: rgba(206,206,205,0.24);
+
+      --bot-bg: rgba(122,19,21,0.12);
+      --bot-border: rgba(122,19,21,0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body{
+      margin:0;
+      font-family: Arial, sans-serif;
+      background: var(--yaka-dark);
+      color: var(--text);
+      min-height: 100vh;
+      /* subtle modern glow */
+      background-image:
+        radial-gradient(900px 520px at 10% 5%, rgba(122,19,21,0.35), transparent 55%),
+        radial-gradient(900px 520px at 90% 15%, rgba(206,206,205,0.14), transparent 55%),
+        radial-gradient(700px 420px at 50% 120%, rgba(122,19,21,0.22), transparent 60%);
+    }
+
+    .wrap{
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 18px 14px 22px;
+    }
+
+    .card{
+      border-radius: 22px;
+      overflow: hidden;
+      border: 1px solid var(--card-border);
+      background: linear-gradient(180deg, rgba(22,22,22,0.86), rgba(22,22,22,0.72));
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    /* ---------- Header (logo centred) ---------- */
+    .header{
+      padding: 22px 18px 14px;
+      text-align: center;
+      position: relative;
+    }
+
+    .header::after{
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(900px 250px at 50% 0%, rgba(122,19,21,0.55), transparent 60%),
+        radial-gradient(900px 250px at 50% 60%, rgba(206,206,205,0.10), transparent 60%);
+      opacity: 0.9;
+    }
+
+    .brand{
+      position: relative;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      gap: 10px;
+    }
+
+    .brand img{
+      height: 200px;     /* bigger logo */
+      width: auto;
+      display: block;
+      filter: drop-shadow(0 12px 22px rgba(0,0,0,0.55));
+    }
+
+    .brand h1{
+      margin: 0;
+      font-size: 28px;
+      letter-spacing: 0.4px;
+      font-weight: 800;
+      color: var(--yaka-grey);
+      text-transform: none;
+    }
+
+    .brand .tag{
+      margin-top: -6px;
+      font-size: 14px;
+      color: rgba(206,206,205,0.82);
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+
+    .sub{
+      padding: 12px 18px;
+      font-size: 13px;
+      color: var(--muted);
+      border-top: 1px solid rgba(206,206,205,0.10);
+      border-bottom: 1px solid rgba(206,206,205,0.10);
+      background: rgba(0,0,0,0.08);
+    }
+
+    /* ---------- Status pills ---------- */
+    .status{
+      padding: 10px 18px;
+      font-size: 12px;
+      color: var(--muted);
+      border-bottom: 1px solid rgba(206,206,205,0.10);
+      background: rgba(0,0,0,0.10);
+    }
+
+    .pill{
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 999px;
+      margin-right: 8px;
+      border: 1px solid rgba(206,206,205,0.22);
+      background: rgba(206,206,205,0.08);
+      color: rgba(206,206,205,0.92);
+    }
+
+    /* ---------- Chat area ---------- */
+    .chat{
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: 60vh;
+      overflow-y: auto;
+      background:
+        radial-gradient(1000px 520px at 25% 0%, rgba(122,19,21,0.16), transparent 60%),
+        radial-gradient(900px 520px at 90% 10%, rgba(206,206,205,0.08), transparent 55%),
+        rgba(0,0,0,0.06);
+    }
+
+    .bubble{
+      padding: 12px 14px;
+      border-radius: 16px;
+      max-width: 92%;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      border: 1px solid rgba(206,206,205,0.10);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.20);
+    }
+
+    .me{
+      align-self: flex-end;
+      background: var(--me-bg);
+      border-color: var(--me-border);
+    }
+
+    .bot{
+      align-self: flex-start;
+      background: var(--bot-bg);
+      border-color: var(--bot-border);
+    }
+
+    .bubble a{
+      color: var(--yaka-grey);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      word-break: break-word;
+    }
+
+    .meta{
+      font-size: 11px;
+      color: rgba(206,206,205,0.68);
+      margin-top: 8px;
+    }
+
+    /* ---------- Input area ---------- */
+    .input-area{
+      padding: 14px 18px;
+      border-top: 1px solid rgba(206,206,205,0.10);
+      background: rgba(0,0,0,0.10);
+    }
+
+    .row{
+      display:flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    #msg{
+      flex:1;
+      padding: 12px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--input-border);
+      font-size: 16px;
+      outline: none;
+      background: var(--input-bg);
+      color: var(--yaka-grey);
+    }
+
+    #msg::placeholder{
+      color: rgba(206,206,205,0.55);
+    }
+
+    #msg:focus{
+      border-color: rgba(122,19,21,0.70);
+      box-shadow: 0 0 0 3px rgba(122,19,21,0.25);
+    }
+
+    button{
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform .06s ease, opacity .15s ease, box-shadow .15s ease;
+    }
+
+    button:active{
+      transform: translateY(1px);
+    }
+
+    .btn{
+      background: var(--yaka-red);
+      color: var(--yaka-grey);
+      box-shadow: 0 10px 20px rgba(122,19,21,0.25);
+      border: 1px solid rgba(206,206,205,0.14);
+    }
+
+    .btn.secondary{
+      background: rgba(206,206,205,0.08);
+      color: var(--yaka-grey);
+      border: 1px solid rgba(206,206,205,0.22);
+      box-shadow: none;
+    }
+
+    .btn:hover{ opacity: 0.92; }
+
+    .btn:disabled{
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .hint{
+      font-size: 12px;
+      margin-top: 8px;
+      color: rgba(206,206,205,0.70);
+    }
+
+    .small-btn{
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="card">
+
+      <div class="header">
+        <div class="brand">
+          <img src="/logo.png" alt="YAKA Residences Logo" />
+          <div class="tag">Guest Assistant</div>
+        </div>
+      </div>
+
+      <div class="sub">
+        Ask questions about Wi-Fi, check-in/out, house rules, and nearby places.
+      </div>
+
+      <div class="status">
+        <span class="pill" id="aptPill">Apartment: (not set)</span>
+        <span class="pill" id="apiPill">API: checking…</span>
+        <span class="pill" id="micPill">Mic: ready</span>
+      </div>
+
+      <div class="chat" id="chat"></div>
+
+      <div class="input-area">
+        <div class="row">
+          <input id="msg" placeholder="Type or speak your question…" autocomplete="off" />
+          <button class="btn secondary" id="micBtn" type="button" title="Voice question" aria-label="Voice question">🎙️</button>
+          <button class="btn" id="sendBtn" type="button">Send</button>
+        </div>
+        <div class="hint">
+          Tip: Tap 🎙️ to record, tap again to stop & send. The bot can reply in your language and you can play replies aloud.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+  const chatEl  = document.getElementById('chat');
+  const msgEl   = document.getElementById('msg');
+  const sendBtn = document.getElementById('sendBtn');
+  const micBtn  = document.getElementById('micBtn');
+  const aptPill = document.getElementById('aptPill');
+  const apiPill = document.getElementById('apiPill');
+  const micPill = document.getElementById('micPill');
+
+  const params = new URLSearchParams(window.location.search);
+  const apt = (params.get('apt') || '').trim();
+
+  aptPill.textContent = apt ? `Apartment: ${apt}` : 'Apartment: (not set)';
+
+  // Cache TTS audio by exact reply text
+  const ttsCache = new Map(); // text -> blobUrl
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, m => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[m]));
+  }
+
+  function linkify(text) {
+    // Convert URLs to clickable links, preserve line breaks
+    const safe = escapeHtml(text);
+    const withLinks = safe.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+    return withLinks.replace(/\n/g, '<br>');
+  }
+
+  function setMicStatus(text) {
+    micPill.textContent = `Mic: ${text}`;
+  }
+
+  function addBubble(text, who = 'bot', meta = '', options = {}) {
+    const div = document.createElement('div');
+    div.className = `bubble ${who}`;
+
+    const content = document.createElement('div');
+    if (who === 'bot') {
+      content.innerHTML = linkify(text);
+    } else {
+      content.textContent = text;
+    }
+    div.appendChild(content);
+
+    // Add Speak (TTS) button on bot messages
+    if (who === 'bot' && options.speak === true) {
+      const row = document.createElement('div');
+      row.style.marginTop = '10px';
+
+      const btn = document.createElement('button');
+      btn.className = 'btn secondary small-btn';
+      btn.type = 'button';
+      btn.textContent = '🔊 Speak';
+
+      btn.onclick = async () => {
+        btn.disabled = true;
+        const oldLabel = btn.textContent;
+        btn.textContent = 'Generating…';
+        try {
+          // Use cached audio if available
+          if (ttsCache.has(text)) {
+            const audio = new Audio(ttsCache.get(text));
+            await audio.play();
+            return;
+          }
+
+          const r = await fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text })
+          });
+          if (!r.ok) throw new Error(await r.text());
+
+          const blob = await r.blob();
+          const url = URL.createObjectURL(blob);
+          ttsCache.set(text, url);
+
+          const audio = new Audio(url);
+          await audio.play();
+        } catch (e) {
+          alert('Could not play voice. ' + (e.message || e));
+        } finally {
+          btn.disabled = false;
+          btn.textContent = oldLabel;
+        }
+      };
+
+      row.appendChild(btn);
+      div.appendChild(row);
+    }
+
+    if (meta) {
+      const m = document.createElement('div');
+      m.className = 'meta';
+      m.textContent = meta;
+      div.appendChild(m);
+    }
+
+    chatEl.appendChild(div);
+    chatEl.scrollTop = chatEl.scrollHeight;
+  }
+
+  async function pingApi() {
+    try {
+      const res = await fetch('/', { method: 'GET' });
+      apiPill.textContent = res.ok ? 'API: OK' : 'API: not ready';
+    } catch (e) {
+      apiPill.textContent = 'API: offline';
+    }
+  }
+
+  async function sendMessage(text) {
+    const message = (text ?? msgEl.value).trim();
+    if (!message) return;
+
+    if (!apt) {
+      addBubble('This link is missing an apartment code. Please scan the apartment QR code or open with ?apt=YAKA01.', 'bot', '', { speak: true });
+      return;
+    }
+
+    if (!text) msgEl.value = '';
+    addBubble(message, 'me');
+
+    sendBtn.disabled = true;
+    micBtn.disabled = true;
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apt, message })
+      });
+
+      if (!res.ok) {
+        const t = await res.text();
+        addBubble('Sorry — something went wrong contacting the server.', 'bot', `HTTP ${res.status}: ${t.slice(0, 160)}`, { speak: true });
+        return;
+      }
+
+      const data = await res.json();
+      const reply = data.reply || 'No reply returned.';
+      const meta = [
+        data.source ? `source=${data.source}` : null,
+        (typeof data.score === 'number') ? `score=${data.score.toFixed(2)}` : null,
+        data.detected_language ? `lang=${data.detected_language}` : null
+      ].filter(Boolean).join(' • ');
+
+      addBubble(reply, 'bot', meta, { speak: true });
+    } catch (e) {
+      addBubble('Sorry — could not reach the server. Is it running?', 'bot', e.message || String(e), { speak: true });
+    } finally {
+      sendBtn.disabled = false;
+      micBtn.disabled = false;
+      msgEl.focus();
+    }
+  }
+
+  // Typing + send button
+  sendBtn.addEventListener('click', () => sendMessage());
+  msgEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendMessage();
+  });
+
+  // -----------------------
+  // MediaRecorder Voice STT
+  // -----------------------
+  let mediaRecorder = null;
+  let chunks = [];
+  let isRecording = false;
+
+  async function startRecording() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setMicStatus('unsupported');
+      addBubble('Recording is not supported on this browser.', 'bot', '', { speak: true });
+      return;
+    }
+
+    // Microphone on iOS Safari requires HTTPS (or localhost)
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+      setMicStatus('needs https');
+      addBubble('Microphone needs HTTPS on mobiles. Use your Azure HTTPS URL or an HTTPS tunnel for testing.', 'bot', '', { speak: true });
+      return;
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    chunks = [];
+
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) chunks.push(e.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+
+      setMicStatus('transcribing…');
+
+      const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      const fd = new FormData();
+      fd.append('audio', blob, 'audio.webm');
+
+      try {
+        const r = await fetch('/api/stt', { method: 'POST', body: fd });
+        if (!r.ok) throw new Error(await r.text());
+
+        const data = await r.json();
+        const text = (data.text || '').trim();
+
+        if (!text) {
+          addBubble("Sorry — I couldn't hear that. Please try again.", 'bot', '', { speak: true });
+          setMicStatus('ready');
+          return;
+        }
+
+        setMicStatus('ready');
+        await sendMessage(text);
+      } catch (e) {
+        setMicStatus('error');
+        addBubble('Voice transcription failed.', 'bot', e.message || String(e), { speak: true });
+        setMicStatus('ready');
+      }
+    };
+
+    mediaRecorder.start();
+    setMicStatus('recording…');
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  }
+
+  micBtn.addEventListener('click', async () => {
+    try {
+      if (!isRecording) {
+        isRecording = true;
+        micBtn.textContent = '⏹️';
+        await startRecording();
+      } else {
+        isRecording = false;
+        micBtn.textContent = '🎙️';
+        stopRecording();
+      }
+    } catch (e) {
+      isRecording = false;
+      micBtn.textContent = '🎙️';
+      setMicStatus('error');
+      addBubble('Could not start recording.', 'bot', e.message || String(e), { speak: true });
+      setMicStatus('ready');
+    }
+  });
+
+  // Initial UX
+  addBubble('Hi! Ask me anything about your stay — Wi-Fi, check-in/out, house rules, and local tips.', 'bot', '', { speak: true });
+  if (!apt) addBubble('This page needs an apartment code. Example: ?apt=YAKA01', 'bot', '', { speak: true });
+
+  setMicStatus('ready');
+  pingApi();
+  msgEl.focus(); // ensure typing works immediately
+</script>
+
+</body>
+</html>
