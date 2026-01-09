@@ -12,3 +12,17 @@ yarn-error.log*
 # OS files
 .DS_Store
 Thumbs.db
+
+# secrets
+.env
+.env.*
+key/
+*.json
+
+# node
+node_modules/
+
+# logs
+*.log
+
+
