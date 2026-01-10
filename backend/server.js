@@ -39,6 +39,53 @@ if (!GOOGLE_PLACES_API_KEY) {
   console.error('Warning: Missing GOOGLE_PLACES_API_KEY in .env - nearby places will fail.');
 }
 
+// ----------------------------------------------------
+// NEW: Better error details for OpenAI failures (403 etc.)
+// ----------------------------------------------------
+function summariseAxiosError(err) {
+  try {
+    const status = err?.response?.status;
+    const statusText = err?.response?.statusText;
+    const url = err?.config?.url;
+    const method = (err?.config?.method || '').toUpperCase();
+
+    let data = err?.response?.data;
+    // axios may give arraybuffer sometimes; try decode
+    if (Buffer.isBuffer(data)) data = data.toString('utf8');
+    if (typeof data === 'string') {
+      // try parse json if possible
+      try { data = JSON.parse(data); } catch { /* ignore */ }
+    }
+
+    const msg =
+      data?.error?.message ||
+      data?.message ||
+      err?.message ||
+      'Unknown error';
+
+    const code =
+      data?.error?.code ||
+      data?.code ||
+      undefined;
+
+    return {
+      status,
+      statusText,
+      where: `${method} ${url || ''}`.trim(),
+      code,
+      message: msg,
+      raw: (typeof data === 'object' ? JSON.stringify(data) : String(data || '')).slice(0, 2000)
+    };
+  } catch (e) {
+    return {
+      status: err?.response?.status,
+      where: 'unknown',
+      message: err?.message || String(err),
+      raw: ''
+    };
+  }
+}
+
 // ---- Google Sheets loader ----
 let FAQ_DATA = {};     // { apt_id: [ {question, answer, visibility, _embedding}, ... ] }
 let GLOBAL_FAQS = [];  // apt_id === 'ALL'
@@ -138,7 +185,7 @@ function getApartmentById(aptId) {
 }
 
 // -------------------------------
-// LocalGuide: named place + directions handling (NEW)
+// LocalGuide: named place + directions handling
 // -------------------------------
 function norm(s) {
   return (s || '')
@@ -229,7 +276,7 @@ function formatLocalGuideReply(placeRow, message) {
 }
 
 // -------------------------------
-// LocalGuide: "nearest <category>" handling (NEW)
+// LocalGuide: "nearest <category>" handling
 // Uses LocalGuide columns: apt_id, category, name, distance, description, maps_link
 // -------------------------------
 function normaliseCategory(s) {
@@ -240,19 +287,15 @@ function distanceToMetres(distanceStr) {
   const s = (distanceStr || '').toString().trim().toLowerCase();
   if (!s) return Number.POSITIVE_INFINITY;
 
-  // kilometres e.g. "0.5 km"
   const km = s.match(/([\d.]+)\s*km/);
   if (km) return parseFloat(km[1]) * 1000;
 
-  // metres e.g. "500 m" or "500m"
   const m = s.match(/([\d.]+)\s*m\b/);
   if (m) return parseFloat(m[1]);
 
-  // minutes e.g. "2 mins"
   const mins = s.match(/([\d.]+)\s*(min|mins|minute|minutes)\b/);
-  if (mins) return parseFloat(mins[1]) * 80; // simple heuristic
+  if (mins) return parseFloat(mins[1]) * 80; // heuristic
 
-  // fallback: first number => metres
   const num = s.match(/([\d.]+)/);
   if (num) return parseFloat(num[1]);
 
@@ -268,7 +311,6 @@ function getLocalGuideRowsForApt(aptId) {
 function detectNearestCategoryIntent(message) {
   const s = norm(message);
 
-  // supermarkets
   if (
     s.includes('nearest supermarket') ||
     s.includes('closest supermarket') ||
@@ -283,7 +325,6 @@ function detectNearestCategoryIntent(message) {
     return { category: 'supermarket', label: 'supermarket' };
   }
 
-  // atms
   if (
     s.includes('nearest atm') ||
     s.includes('closest atm') ||
@@ -295,7 +336,6 @@ function detectNearestCategoryIntent(message) {
     return { category: 'atm', label: 'ATM' };
   }
 
-  // pharmacies
   if (
     s.includes('nearest pharmacy') ||
     s.includes('closest pharmacy') ||
@@ -307,7 +347,6 @@ function detectNearestCategoryIntent(message) {
     return { category: 'pharmacy', label: 'pharmacy' };
   }
 
-  // cafes
   if (
     s.includes('nearest cafe') ||
     s.includes('closest cafe') ||
@@ -317,7 +356,6 @@ function detectNearestCategoryIntent(message) {
     return { category: 'cafe', label: 'café' };
   }
 
-  // restaurants
   if (
     s.includes('nearest restaurant') ||
     s.includes('closest restaurant') ||
@@ -327,7 +365,6 @@ function detectNearestCategoryIntent(message) {
     return { category: 'restaurant', label: 'restaurant' };
   }
 
-  // attractions
   if (
     s.includes('nearest attraction') ||
     s.includes('closest attraction') ||
@@ -369,15 +406,13 @@ function formatLocalGuideNearestReply(row, label) {
 }
 
 // -------------------------------
-// Nearby intent (UPDATED to avoid hijacking "How do I get to SPAR")
+// Nearby intent (avoid hijacking "How do I get to SPAR")
 // -------------------------------
 function detectNearbyIntent(message) {
   const s = (message || '').toLowerCase();
 
-  // If asking directions, likely a specific place -> not a generic "nearby places" query
   if (isDirectionsQuestion(message)) return null;
 
-  // If message contains a known LocalGuide place name, don't route to Google Places
   const msgN = norm(message);
   const hasNamedPlace = (LOCAL_GUIDE || []).some(r => {
     const n = norm(r.name || '');
@@ -401,7 +436,6 @@ function detectNearbyIntent(message) {
     return { type: 'supermarket', label: 'supermarkets' };
   }
   if (s.includes('attraction') || s.includes('things to do') || s.includes('tourist') || s.includes('visit')) {
-    // legacy endpoint supports tourist_attraction
     return { type: 'tourist_attraction', label: 'attractions' };
   }
   return null;
@@ -413,16 +447,24 @@ function detectNearbyIntent(message) {
 async function getEmbedding(text) {
   if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not set');
 
-  const resp = await axios.post(
-    'https://api.openai.com/v1/embeddings',
-    { model: EMB_MODEL, input: text },
-    {
-      headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-      timeout: 20000
-    }
-  );
-
-  return resp.data.data[0].embedding;
+  try {
+    const resp = await axios.post(
+      'https://api.openai.com/v1/embeddings',
+      { model: EMB_MODEL, input: text },
+      {
+        headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+        timeout: 20000
+      }
+    );
+    return resp.data.data[0].embedding;
+  } catch (err) {
+    const info = summariseAxiosError(err);
+    console.error('[OpenAI embeddings error]', info);
+    // rethrow with clearer message
+    const e = new Error(`OpenAI embeddings failed (${info.status || 'no-status'}): ${info.message}`);
+    e._openai = info;
+    throw e;
+  }
 }
 
 async function openaiChatCompletion(messages, model = CHAT_MODEL, options = {}) {
@@ -436,16 +478,24 @@ async function openaiChatCompletion(messages, model = CHAT_MODEL, options = {}) 
     top_p: options.top_p ?? 1.0,
   };
 
-  const resp = await axios.post('https://api.openai.com/v1/chat/completions', body, {
-    headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-    timeout: 20000
-  });
-
-  return resp.data;
+  try {
+    const resp = await axios.post('https://api.openai.com/v1/chat/completions', body, {
+      headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
+      timeout: 20000
+    });
+    return resp.data;
+  } catch (err) {
+    const info = summariseAxiosError(err);
+    console.error('[OpenAI chat error]', info);
+    const e = new Error(`OpenAI chat failed (${info.status || 'no-status'}): ${info.message}`);
+    e._openai = info;
+    throw e;
+  }
 }
 
 // -------------------------------
 // Language detection & translation
+// (UPDATED: if OpenAI fails, keep app working by returning 'en'/original text)
 // -------------------------------
 async function detectLanguage(text) {
   const system = "You are a language detection assistant. Respond with the ISO 639-1 language code only (e.g. 'en', 'de', 'fr', 'si', 'es').";
@@ -490,6 +540,7 @@ async function translateText(text, targetLang) {
 
 // -------------------------------
 // Embedding match + LLM fallback
+// (UPDATED: if embeddings fail, gracefully skip to fallback)
 // -------------------------------
 function cosineSimilarity(a, b) {
   if (!a || !b || a.length !== b.length) return 0;
@@ -506,13 +557,22 @@ async function findBestMatches(aptData, userMessage, topK = 5) {
   const combined = [...(aptData || []), ...GLOBAL_FAQS];
   if (!combined || combined.length === 0) return { topMatches: [] };
 
-  const userEmb = await getEmbedding(userMessage);
+  let userEmb = null;
+  try {
+    userEmb = await getEmbedding(userMessage);
+  } catch (e) {
+    // If OpenAI is failing (403 etc), don't crash the whole chat.
+    // We'll just return zero matches and let LocalGuide / Places / fallback handle it.
+    console.warn('[Embeddings disabled for this request]', e?._openai || e?.message || e);
+    return { topMatches: [], _embeddings_error: e?._openai || e?.message || String(e) };
+  }
 
   for (const f of combined) {
     if (!f._embedding) {
       try {
         f._embedding = await getEmbedding(f.question || '');
-      } catch {
+      } catch (e) {
+        // leave null
         f._embedding = null;
       }
     }
@@ -554,7 +614,7 @@ If the answer is not present, politely suggest contacting the host.
     const text = data?.choices?.[0]?.message?.content;
     return text ? text.trim() : null;
   } catch (err) {
-    console.error('LLM fallback error:', err?.response?.data || err.message || err);
+    console.error('LLM fallback error:', err?._openai || err?.response?.data || err.message || err);
     return null;
   }
 }
@@ -634,11 +694,7 @@ app.post('/api/chat', async (req, res) => {
 
     const userLang = await detectLanguage(message);
 
-    // ----------------------------------------------------
-    // NEW: "nearest <category>" should use LocalGuide FIRST
-    // Example: "where is the nearest supermarket?"
-    // Falls back to Google Places only if LocalGuide has no match.
-    // ----------------------------------------------------
+    // 1) Nearest <category> from LocalGuide first
     const nearestIntent = detectNearestCategoryIntent(message);
     if (nearestIntent) {
       const nearestRow = getNearestFromLocalGuide(apt, nearestIntent.category);
@@ -659,13 +715,10 @@ app.post('/api/chat', async (req, res) => {
           }
         });
       }
-      // if no LocalGuide entry exists for that category, continue (Google Places may answer)
+      // if no LocalGuide entry for that category, continue to other handlers
     }
 
-    // ----------------------------------------------------
-    // If message references a named LocalGuide place
-    // (e.g. "SPAR"), answer using LocalGuide FIRST.
-    // ----------------------------------------------------
+    // 2) Named LocalGuide place match
     const matchedPlace = findLocalGuidePlace(apt, message);
     if (matchedPlace) {
       let replyText = formatLocalGuideReply(matchedPlace, message);
@@ -683,7 +736,7 @@ app.post('/api/chat', async (req, res) => {
       });
     }
 
-    // Nearby places via Google Places (legacy) - ONLY generic nearby queries
+    // 3) Generic nearby places via Google Places
     const intent = detectNearbyIntent(message);
     if (intent) {
       const aptRow = getApartmentById(apt);
@@ -716,7 +769,7 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    // Embedding FAQ match
+    // 4) FAQ embeddings (now resilient if OpenAI is blocked)
     const { topMatches } = await findBestMatches(FAQ_DATA[apt] || [], message, 5);
     const best = topMatches[0] || null;
     const bestScore = best ? best._score : 0;
@@ -734,7 +787,7 @@ app.post('/api/chat', async (req, res) => {
       });
     }
 
-    // LLM fallback
+    // 5) LLM fallback (if OpenAI is failing, it will return null and we’ll fall through)
     const llmReply = await callLLMFallback(message, topMatches, userLang);
     if (llmReply) {
       return res.json({
@@ -746,7 +799,7 @@ app.post('/api/chat', async (req, res) => {
       });
     }
 
-    // Final fallback
+    // 6) Final fallback (no OpenAI required)
     let finalText = "I don't have a specific answer for that. Would you like me to notify the host?";
     if (userLang !== 'en') finalText = await translateText(finalText, userLang);
 
@@ -758,8 +811,15 @@ app.post('/api/chat', async (req, res) => {
       detected_language: userLang
     });
   } catch (err) {
-    console.error('Chat error:', err?.message || err);
-    res.status(500).json({ error: 'Internal server error' });
+    // NEW: include OpenAI error details in logs (super helpful for 403 debugging)
+    const info = err?._openai || summariseAxiosError(err);
+    console.error('Chat error (detailed):', info);
+
+    // Return a clean message to the user, but include a hint in meta
+    return res.status(500).json({
+      error: 'Internal server error',
+      hint: info?.status ? `Upstream error ${info.status}: ${info.message}` : (info?.message || 'Unknown error')
+    });
   }
 });
 
@@ -788,7 +848,7 @@ app.post('/api/tts', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).send(Buffer.from(resp.data));
   } catch (err) {
-    console.error('TTS error:', err?.response?.data || err.message || err);
+    console.error('TTS error:', summariseAxiosError(err));
     return res.status(500).json({ error: 'TTS failed' });
   }
 });
@@ -815,7 +875,7 @@ app.post('/api/stt', upload.single('audio'), async (req, res) => {
 
     return res.json({ text: resp.data.text || '' });
   } catch (err) {
-    console.error('STT error:', err?.response?.data || err.message || err);
+    console.error('STT error:', summariseAxiosError(err));
     return res.status(500).json({ error: 'STT failed' });
   }
 });
