@@ -712,7 +712,7 @@ app.get('/', (req, res) => res.send('Yaka chatbot backend is running!'));
 
 app.get('/debug/faq-data', (req, res) => {
   res.json({
-    version: SERVER_VERSION,
+    version: "DEPLOY-TEST-2026-01-15-01",
     apartmentsCount: APARTMENTS.length,
     localGuideCount: LOCAL_GUIDE.length,
     faqApartments: Object.keys(FAQ_DATA),
