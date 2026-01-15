@@ -35,7 +35,7 @@ const TTS_VOICE = process.env.OPENAI_TTS_VOICE || 'alloy';
 const STT_MODEL = process.env.OPENAI_STT_MODEL || 'gpt-4o-mini-transcribe';
 
 // ---- Version stamp (so you can confirm Azure is running this exact file) ----
-const SERVER_VERSION = '2026-01-15T20:XXZ-global-faq-fix';
+//const SERVER_VERSION = '2026-01-15T20:XXZ-global-faq-fix';
 console.log('SERVER.JS VERSION:', SERVER_VERSION);
 console.log("SERVER.JS VERSION: 2026-01-15-DEPLOY-TEST");
 
@@ -718,6 +718,10 @@ app.get('/debug/faq-data', (req, res) => {
     faqApartments: Object.keys(FAQ_DATA),
     globalFaqCount: GLOBAL_FAQS.length
   });
+});
+console.log("SERVER.JS VERSION:", SERVER_VERSION);
+app.get('/debug/version', (req, res) => {
+  res.json({ version: SERVER_VERSION });
 });
 
 app.post('/api/chat', async (req, res) => {
