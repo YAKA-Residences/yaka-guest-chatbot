@@ -13,7 +13,9 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
 const port = process.env.PORT || 3000;
-
+const SERVER_VERSION = "2026-01-15-DEPLOY-TEST";
+app.get("/debug/version", (req, res) => res.json({ version: SERVER_VERSION }));
+console.log("SERVER.JS VERSION:", SERVER_VERSION);
 app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static('public'));
