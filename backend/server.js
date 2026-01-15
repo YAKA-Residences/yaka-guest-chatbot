@@ -35,6 +35,7 @@ const STT_MODEL = process.env.OPENAI_STT_MODEL || 'gpt-4o-mini-transcribe';
 // ---- Version stamp (so you can confirm Azure is running this exact file) ----
 const SERVER_VERSION = '2026-01-15T20:XXZ-global-faq-fix';
 console.log('SERVER.JS VERSION:', SERVER_VERSION);
+console.log("SERVER.JS VERSION: 2026-01-15-DEPLOY-TEST");
 
 if (!OPENAI_API_KEY) {
   console.error('Warning: Missing OPENAI_API_KEY in .env - embeddings, chat, STT and TTS will fail.');
