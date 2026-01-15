@@ -1,4 +1,4 @@
-name: Build and deploy Node.js app to Azure Web App - GuestAssistant
+name: Build and deploy Node.js app to Azure Web App - YAKAGuestAssistant
 
 on:
   push:
@@ -55,6 +55,6 @@ jobs:
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'GuestAssistant'
+          app-name: 'YAKAGuestAssistant'
           slot-name: 'Production'
           package: .
