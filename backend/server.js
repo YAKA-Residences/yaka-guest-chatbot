@@ -20,7 +20,7 @@ app.use(express.static('public'));
 
 // ---- Config ----
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const EMB_MODEL = process.env.OPENAI_EMBED_MODEL || 'text-embedding-3-small';
+const EMB_MODEL = process.env.OPENAI_OPENAI_EMBED_MODEL || process.env.OPENAI_EMBED_MODEL || 'text-embedding-3-small';
 const CHAT_MODEL = process.env.OPENAI_CHAT_MODEL || 'gpt-4o-mini';
 const EMB_THRESHOLD = parseFloat(process.env.EMB_THRESHOLD || '0.72');
 
@@ -32,6 +32,10 @@ const TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
 const TTS_VOICE = process.env.OPENAI_TTS_VOICE || 'alloy';
 const STT_MODEL = process.env.OPENAI_STT_MODEL || 'gpt-4o-mini-transcribe';
 
+// ---- Version stamp (so you can confirm Azure is running this exact file) ----
+const SERVER_VERSION = '2026-01-15T20:XXZ-global-faq-fix';
+console.log('SERVER.JS VERSION:', SERVER_VERSION);
+
 if (!OPENAI_API_KEY) {
   console.error('Warning: Missing OPENAI_API_KEY in .env - embeddings, chat, STT and TTS will fail.');
 }
@@ -40,7 +44,7 @@ if (!GOOGLE_PLACES_API_KEY) {
 }
 
 // ----------------------------------------------------
-// NEW: Better error details for OpenAI failures (403 etc.)
+// Better error details for OpenAI failures (403 etc.)
 // ----------------------------------------------------
 function summariseAxiosError(err) {
   try {
@@ -50,10 +54,8 @@ function summariseAxiosError(err) {
     const method = (err?.config?.method || '').toUpperCase();
 
     let data = err?.response?.data;
-    // axios may give arraybuffer sometimes; try decode
     if (Buffer.isBuffer(data)) data = data.toString('utf8');
     if (typeof data === 'string') {
-      // try parse json if possible
       try { data = JSON.parse(data); } catch { /* ignore */ }
     }
 
@@ -88,7 +90,7 @@ function summariseAxiosError(err) {
 
 // ---- Google Sheets loader ----
 let FAQ_DATA = {};     // { apt_id: [ {question, answer, visibility, _embedding}, ... ] }
-let GLOBAL_FAQS = [];  // apt_id === 'ALL'
+let GLOBAL_FAQS = [];  // global FAQs
 let APARTMENTS = [];   // rows from Apartments sheet
 let LOCAL_GUIDE = [];  // rows from LocalGuide sheet
 
@@ -116,18 +118,42 @@ async function readSheetByTitleUsingGoogleApi(title, sheetsApi, spreadsheetId) {
   }
 }
 
+function normaliseAptId(v) {
+  return ((v ?? '') + '').toString().trim();
+}
+
+function isGlobalAptId(aptRaw) {
+  const s = normaliseAptId(aptRaw);
+  const u = s.toUpperCase();
+  return (
+    !s ||                 // blank = global
+    u === 'ALL' ||
+    u === 'GLOBAL' ||
+    u === 'ALL APARTMENTS' ||
+    u === '*'
+  );
+}
+
 async function loadAllData() {
   try {
+    const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+    const key = (process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '').replace(/\\n/g, '\n');
+    const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
+
+    if (!email || !key || !spreadsheetId) {
+      console.error('Missing Google Sheets env vars. Required: GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_SERVICE_ACCOUNT_KEY, GOOGLE_SHEETS_ID');
+      return;
+    }
+
     const jwt = new google.auth.JWT(
-      process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      email,
       null,
-      (process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '').replace(/\\n/g, '\n'),
+      key,
       ['https://www.googleapis.com/auth/spreadsheets.readonly']
     );
     await jwt.authorize();
 
     const sheetsApi = google.sheets({ version: 'v4', auth: jwt });
-    const spreadsheetId = process.env.GOOGLE_SHEETS_ID;
 
     const [localGuideRows, apartmentsRows, faqsRows] = await Promise.all([
       readSheetByTitleUsingGoogleApi('LocalGuide', sheetsApi, spreadsheetId),
@@ -135,29 +161,38 @@ async function loadAllData() {
       readSheetByTitleUsingGoogleApi('FAQs', sheetsApi, spreadsheetId),
     ]);
 
-    // Build FAQ map keyed by apt_id
-    const faqMap = {};
-    faqsRows.forEach(r => {
-      const apt = ((r.apt_id || '') + '').toString().trim();
-      if (!apt) return;
-      if (!faqMap[apt]) faqMap[apt] = [];
-      faqMap[apt].push({
-        question: r.question || '',
-        answer: r.answer || '',
-        visibility: r.visibility || '',
-        _embedding: null
-      });
-    });
+    // ---- Diagnostics (very useful on Azure) ----
+    console.log('Google Sheets ID ending:', String(spreadsheetId).slice(-6));
+    console.log('FAQs rows read:', faqsRows.length);
+    console.log('FAQ headers detected:', faqsRows[0] ? Object.keys(faqsRows[0]) : '(none)');
+    console.log('Sample apt_id values:', faqsRows.slice(0, 10).map(r => r.apt_id));
 
-    // Global FAQs where apt_id === 'ALL'
-    const globalFaqs = faqsRows
-      .filter(r => ((r.apt_id || '') + '').toString().trim().toUpperCase() === 'ALL')
-      .map(r => ({
+    // ---- Build FAQ map + global FAQs (FIXED) ----
+    const faqMap = {};
+    const globalFaqs = [];
+
+    faqsRows.forEach(r => {
+      const aptRaw = normaliseAptId(r.apt_id);
+
+      const item = {
         question: r.question || '',
         answer: r.answer || '',
         visibility: r.visibility || '',
         _embedding: null
-      }));
+      };
+
+      // Treat blank / ALL / GLOBAL etc as global FAQs
+      if (isGlobalAptId(aptRaw)) {
+        // Avoid adding empty rows
+        if ((item.question || '').trim() || (item.answer || '').trim()) {
+          globalFaqs.push(item);
+        }
+        return;
+      }
+
+      if (!faqMap[aptRaw]) faqMap[aptRaw] = [];
+      faqMap[aptRaw].push(item);
+    });
 
     FAQ_DATA = faqMap;
     GLOBAL_FAQS = globalFaqs;
@@ -460,7 +495,6 @@ async function getEmbedding(text) {
   } catch (err) {
     const info = summariseAxiosError(err);
     console.error('[OpenAI embeddings error]', info);
-    // rethrow with clearer message
     const e = new Error(`OpenAI embeddings failed (${info.status || 'no-status'}): ${info.message}`);
     e._openai = info;
     throw e;
@@ -495,7 +529,6 @@ async function openaiChatCompletion(messages, model = CHAT_MODEL, options = {}) 
 
 // -------------------------------
 // Language detection & translation
-// (UPDATED: if OpenAI fails, keep app working by returning 'en'/original text)
 // -------------------------------
 async function detectLanguage(text) {
   const system = "You are a language detection assistant. Respond with the ISO 639-1 language code only (e.g. 'en', 'de', 'fr', 'si', 'es').";
@@ -540,7 +573,6 @@ async function translateText(text, targetLang) {
 
 // -------------------------------
 // Embedding match + LLM fallback
-// (UPDATED: if embeddings fail, gracefully skip to fallback)
 // -------------------------------
 function cosineSimilarity(a, b) {
   if (!a || !b || a.length !== b.length) return 0;
@@ -561,8 +593,6 @@ async function findBestMatches(aptData, userMessage, topK = 5) {
   try {
     userEmb = await getEmbedding(userMessage);
   } catch (e) {
-    // If OpenAI is failing (403 etc), don't crash the whole chat.
-    // We'll just return zero matches and let LocalGuide / Places / fallback handle it.
     console.warn('[Embeddings disabled for this request]', e?._openai || e?.message || e);
     return { topMatches: [], _embeddings_error: e?._openai || e?.message || String(e) };
   }
@@ -572,7 +602,6 @@ async function findBestMatches(aptData, userMessage, topK = 5) {
       try {
         f._embedding = await getEmbedding(f.question || '');
       } catch (e) {
-        // leave null
         f._embedding = null;
       }
     }
@@ -655,7 +684,7 @@ async function getNearbyPlaces({ lat, lng, type, radius }) {
   }
 
   const results = resp.data.results || [];
-  cacheSet(cacheKey, results, 24 * 60 * 60 * 1000); // 24h
+  cacheSet(cacheKey, results, 24 * 60 * 60 * 1000);
   return results;
 }
 
@@ -680,6 +709,7 @@ app.get('/', (req, res) => res.send('Yaka chatbot backend is running!'));
 
 app.get('/debug/faq-data', (req, res) => {
   res.json({
+    version: SERVER_VERSION,
     apartmentsCount: APARTMENTS.length,
     localGuideCount: LOCAL_GUIDE.length,
     faqApartments: Object.keys(FAQ_DATA),
@@ -715,7 +745,6 @@ app.post('/api/chat', async (req, res) => {
           }
         });
       }
-      // if no LocalGuide entry for that category, continue to other handlers
     }
 
     // 2) Named LocalGuide place match
@@ -769,7 +798,7 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    // 4) FAQ embeddings (now resilient if OpenAI is blocked)
+    // 4) FAQ embeddings (resilient if OpenAI is blocked)
     const { topMatches } = await findBestMatches(FAQ_DATA[apt] || [], message, 5);
     const best = topMatches[0] || null;
     const bestScore = best ? best._score : 0;
@@ -787,7 +816,7 @@ app.post('/api/chat', async (req, res) => {
       });
     }
 
-    // 5) LLM fallback (if OpenAI is failing, it will return null and we’ll fall through)
+    // 5) LLM fallback
     const llmReply = await callLLMFallback(message, topMatches, userLang);
     if (llmReply) {
       return res.json({
@@ -799,7 +828,7 @@ app.post('/api/chat', async (req, res) => {
       });
     }
 
-    // 6) Final fallback (no OpenAI required)
+    // 6) Final fallback
     let finalText = "I don't have a specific answer for that. Would you like me to notify the host?";
     if (userLang !== 'en') finalText = await translateText(finalText, userLang);
 
@@ -811,11 +840,9 @@ app.post('/api/chat', async (req, res) => {
       detected_language: userLang
     });
   } catch (err) {
-    // NEW: include OpenAI error details in logs (super helpful for 403 debugging)
     const info = err?._openai || summariseAxiosError(err);
     console.error('Chat error (detailed):', info);
 
-    // Return a clean message to the user, but include a hint in meta
     return res.status(500).json({
       error: 'Internal server error',
       hint: info?.status ? `Upstream error ${info.status}: ${info.message}` : (info?.message || 'Unknown error')
