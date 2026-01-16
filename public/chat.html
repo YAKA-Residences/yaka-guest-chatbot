@@ -96,7 +96,7 @@
       text-transform: uppercase;
     }
 
-    /* NEW: language row */
+    /* language row */
     .lang-row{
       position: relative;
       z-index: 2;
@@ -115,6 +115,7 @@
       gap: 8px;
     }
 
+    /* FIX: dropdown visibility for non-selected options */
     .lang-row select{
       padding: 10px 12px;
       border-radius: 12px;
@@ -122,7 +123,27 @@
       background: rgba(0,0,0,0.18);
       color: var(--yaka-grey);
       outline: none;
-      min-width: 220px;
+      min-width: 260px;
+
+      /* improve cross-browser rendering */
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+
+      /* helps some browsers respect dark UI while we force option colours */
+      color-scheme: dark;
+    }
+
+    /* This is the key fix: options must be readable in the opened list */
+    .lang-row select option{
+      background: #f2f2f2;   /* light background so the text shows */
+      color: #111111;        /* dark text */
+    }
+
+    /* optional: focus style */
+    .lang-row select:focus{
+      border-color: rgba(122,19,21,0.70);
+      box-shadow: 0 0 0 3px rgba(122,19,21,0.25);
     }
 
     .sub{
@@ -291,7 +312,6 @@
           <img src="/logo.png" alt="YAKA Residences Logo" />
           <div class="tag" id="tagText">Guest Assistant</div>
 
-          <!-- NEW: Language selector -->
           <div class="lang-row">
             <label>
               <span id="langLabel">Language</span>
@@ -299,6 +319,17 @@
                 <option value="en">English</option>
                 <option value="si">සිංහල (Sinhala)</option>
                 <option value="ta">தமிழ் (Tamil)</option>
+
+                <option value="es">Español (Spanish)</option>
+                <option value="ru">Русский (Russian)</option>
+                <option value="it">Italiano (Italian)</option>
+                <option value="zh">中文 (Mandarin Chinese)</option>
+                <option value="de">Deutsch (German)</option>
+                <option value="pl">Polski (Polish)</option>
+                <option value="fr">Français (French)</option>
+                <option value="hi">हिन्दी (Hindi)</option>
+                <option value="pt">Português (Portuguese)</option>
+                <option value="ar">العربية (Arabic)</option>
               </select>
             </label>
           </div>
@@ -381,7 +412,8 @@
       ttsFail: "Could not play voice.",
       recNotSupported: "Voice recording is not supported on this browser. Please type your question instead.",
       httpsRequired: "Microphone needs HTTPS on mobiles. Use your Azure HTTPS URL (not HTTP).",
-      sttFail: "STT failed. Please try again or type your question."
+      sttFail: "STT failed. Please try again or type your question.",
+      langUpdated: "Language updated. You can now type or speak in this language."
     },
     si: {
       langLabel: "භාෂාව",
@@ -409,8 +441,9 @@
       generating: "තැනෙනවා…",
       ttsFail: "ශබ්දය play කරන්න බැහැ.",
       recNotSupported: "මෙම browser එකේ voice recording support නැහැ. කරුණාකර type කරන්න.",
-      httpsRequired: "මොබයිල් වල microphone සදහා HTTPS අවශ්‍යයි. Azure HTTPS URL එක භාවිතා කරන්න.",
-      sttFail: "Voice to text වැඩ කරුණාකර නැවත උත්සාහ කරන්න හෝ type කරන්න."
+      httpsRequired: "මොබයිල් වල microphone සඳහා HTTPS අවශ්‍යයි. Azure HTTPS URL එක භාවිතා කරන්න.",
+      sttFail: "Voice to text අසාර්ථකයි. නැවත උත්සාහ කරන්න හෝ type කරන්න.",
+      langUpdated: "භාෂාව වෙනස් කළා. දැන් මේ භාෂාවෙන් type හෝ කතා කරන්න."
     },
     ta: {
       langLabel: "மொழி",
@@ -427,9 +460,9 @@
       micRecording: "Mic: பதிவு செய்கிறது…",
       micTranscribing: "Mic: மாற்றுகிறது…",
       micError: "Mic: error",
-      placeholder: "உங்கள் கேள்வியை تایப் செய்யவும் அல்லது பேசவும்…",
+      placeholder: "உங்கள் கேள்வியை type செய்யவும் அல்லது பேசவும்…",
       send: "Send",
-      tip: "குறிப்பு: 🎙️ ஐ தட்டிப் பதிவு செய்யவும்; மீண்டும் தட்டி நிறுத்தி அனுப்பவும். நீங்கள் தேர்ந்த மொழியில் تایப்/பேசலாம். பதிலை ஒலியாகக் கேட்கலாம்.",
+      tip: "குறிப்பு: 🎙️ ஐ தட்டிப் பதிவு செய்யவும்; மீண்டும் தட்டி நிறுத்தி அனுப்பவும். நீங்கள் தேர்ந்த மொழியில் type/பேசலாம். பதிலை ஒலியாகக் கேட்கலாம்.",
       greet: "வணக்கம்! உங்கள் தங்குமிடம் குறித்து எதையும் கேளுங்கள் — Wi-Fi, check-in/out, house rules, மற்றும் உள்ளூர் குறிப்புகள்.",
       missingApt: "இந்த பக்கத்திற்கு apartment code தேவை. உதாரணம்: ?apt=YAKA01",
       missingAptLong: "இந்த லிங்கில் apartment code இல்லை. QR code ஐ scan செய்யவும் அல்லது ?apt=YAKA01 உடன் திறக்கவும்.",
@@ -437,9 +470,161 @@
       stop: "⏹ Stop",
       generating: "உருவாக்குகிறது…",
       ttsFail: "ஒலியை இயக்க முடியவில்லை.",
-      recNotSupported: "இந்த browser இல் voice recording ஆதரவு இல்லை. தயவுசெய்து تایப் செய்யவும்.",
+      recNotSupported: "இந்த browser இல் voice recording ஆதரவு இல்லை. தயவுசெய்து type செய்யவும்.",
       httpsRequired: "மொபைலில் microphone க்கு HTTPS தேவை. Azure HTTPS URL ஐ பயன்படுத்தவும்.",
-      sttFail: "STT தோல்வி. மீண்டும் முயற்சிக்கவும் அல்லது تایப் செய்யவும்."
+      sttFail: "STT தோல்வி. மீண்டும் முயற்சிக்கவும் அல்லது type செய்யவும்.",
+      langUpdated: "மொழி மாற்றப்பட்டது. இப்போது இந்த மொழியில் type/பேசலாம்."
+    },
+
+    // New UI languages (kept simple & consistent)
+    es: { langLabel:"Idioma", tag:"Asistente de Huéspedes", sub:"Pregunta sobre Wi-Fi, check-in/out, normas de la casa y lugares cercanos.", aptPrefix:"Apartamento",
+      apiChecking:"API: comprobando…", apiOk:"API: OK", apiNotReady:"API: no lista", apiOffline:"API: sin conexión",
+      micReady:"Mic: listo", micUnsupported:"Mic: no compatible", micNeedsHttps:"Mic: requiere HTTPS", micRecording:"Mic: grabando…", micTranscribing:"Mic: transcribiendo…", micError:"Mic: error",
+      placeholder:"Escribe o habla tu pregunta…", send:"Enviar",
+      tip:"Consejo: toca 🎙️ para grabar; toca de nuevo para parar y enviar. Puedes escribir o hablar en tu idioma. Las respuestas se pueden leer en voz alta.",
+      greet:"¡Hola! Pregúntame lo que quieras sobre tu estancia — Wi-Fi, check-in/out, normas y recomendaciones locales.",
+      missingApt:"Esta página necesita un código de apartamento. Ejemplo: ?apt=YAKA01",
+      missingAptLong:"Este enlace no tiene código de apartamento. Escanea el QR del apartamento o abre con ?apt=YAKA01.",
+      speak:"🔊 Hablar", stop:"⏹ Parar", generating:"Generando…", ttsFail:"No se pudo reproducir la voz.",
+      recNotSupported:"La grabación de voz no es compatible en este navegador. Escribe tu pregunta.",
+      httpsRequired:"El micrófono requiere HTTPS en móviles. Usa tu URL HTTPS (no HTTP).",
+      sttFail:"Falló voz a texto. Inténtalo de nuevo o escribe.",
+      langUpdated:"Idioma actualizado. Ahora puedes escribir o hablar en este idioma."
+    },
+
+    ru: { langLabel:"Язык", tag:"Помощник гостя", sub:"Спросите про Wi-Fi, заезд/выезд, правила дома и места рядом.", aptPrefix:"Апартаменты",
+      apiChecking:"API: проверка…", apiOk:"API: OK", apiNotReady:"API: не готово", apiOffline:"API: недоступно",
+      micReady:"Микрофон: готов", micUnsupported:"Микрофон: не поддерживается", micNeedsHttps:"Микрофон: нужен HTTPS", micRecording:"Микрофон: запись…", micTranscribing:"Микрофон: распознавание…", micError:"Микрофон: ошибка",
+      placeholder:"Введите или скажите вопрос…", send:"Отправить",
+      tip:"Совет: нажмите 🎙️ для записи; нажмите ещё раз, чтобы остановить и отправить. Можно писать или говорить на выбранном языке. Ответ можно озвучить.",
+      greet:"Здравствуйте! Спросите что угодно о проживании — Wi-Fi, заезд/выезд, правила и местные советы.",
+      missingApt:"Нужен код апартамента. Пример: ?apt=YAKA01",
+      missingAptLong:"В ссылке нет кода апартамента. Отсканируйте QR или откройте с ?apt=YAKA01.",
+      speak:"🔊 Озвучить", stop:"⏹ Стоп", generating:"Генерация…", ttsFail:"Не удалось воспроизвести голос.",
+      recNotSupported:"Запись голоса не поддерживается в этом браузере. Пожалуйста, введите вопрос.",
+      httpsRequired:"Для микрофона на телефоне нужен HTTPS. Используйте HTTPS URL.",
+      sttFail:"Не удалось распознать речь. Попробуйте ещё раз или введите текст.",
+      langUpdated:"Язык обновлён. Теперь можно писать или говорить на этом языке."
+    },
+
+    it: { langLabel:"Lingua", tag:"Assistente Ospiti", sub:"Chiedi informazioni su Wi-Fi, check-in/out, regole della casa e luoghi vicini.", aptPrefix:"Appartamento",
+      apiChecking:"API: controllo…", apiOk:"API: OK", apiNotReady:"API: non pronta", apiOffline:"API: offline",
+      micReady:"Mic: pronto", micUnsupported:"Mic: non supportato", micNeedsHttps:"Mic: serve HTTPS", micRecording:"Mic: registrazione…", micTranscribing:"Mic: trascrizione…", micError:"Mic: errore",
+      placeholder:"Scrivi o parla la tua domanda…", send:"Invia",
+      tip:"Suggerimento: tocca 🎙️ per registrare; tocca di nuovo per fermare e inviare. Puoi scrivere o parlare nella lingua selezionata. Le risposte possono essere lette ad alta voce.",
+      greet:"Ciao! Chiedimi qualsiasi cosa sul tuo soggiorno — Wi-Fi, check-in/out, regole e consigli locali.",
+      missingApt:"Questa pagina richiede un codice appartamento. Esempio: ?apt=YAKA01",
+      missingAptLong:"Questo link non include un codice appartamento. Scansiona il QR dell’appartamento o apri con ?apt=YAKA01.",
+      speak:"🔊 Voce", stop:"⏹ Stop", generating:"Generazione…", ttsFail:"Impossibile riprodurre la voce.",
+      recNotSupported:"La registrazione vocale non è supportata in questo browser. Scrivi la domanda.",
+      httpsRequired:"Il microfono richiede HTTPS sui telefoni. Usa l’URL HTTPS.",
+      sttFail:"Riconoscimento vocale fallito. Riprova o scrivi.",
+      langUpdated:"Lingua aggiornata. Ora puoi scrivere o parlare in questa lingua."
+    },
+
+    zh: { langLabel:"语言", tag:"住客助手", sub:"可询问 Wi-Fi、入住/退房、房屋规则及附近地点。", aptPrefix:"公寓",
+      apiChecking:"API：检查中…", apiOk:"API：正常", apiNotReady:"API：未就绪", apiOffline:"API：离线",
+      micReady:"麦克风：就绪", micUnsupported:"麦克风：不支持", micNeedsHttps:"麦克风：需要 HTTPS", micRecording:"麦克风：录音中…", micTranscribing:"麦克风：转写中…", micError:"麦克风：错误",
+      placeholder:"请输入或说出您的问题…", send:"发送",
+      tip:"提示：点按 🎙️ 开始录音；再次点按停止并发送。可用所选语言输入或语音。回复可朗读。",
+      greet:"您好！欢迎提问入住相关任何内容 — Wi-Fi、入住/退房、规则及本地建议。",
+      missingApt:"此页面需要公寓代码，例如：?apt=YAKA01",
+      missingAptLong:"此链接缺少公寓代码。请扫描公寓二维码，或使用 ?apt=YAKA01 打开。",
+      speak:"🔊 朗读", stop:"⏹ 停止", generating:"生成中…", ttsFail:"无法播放语音。",
+      recNotSupported:"该浏览器不支持录音，请改为输入。",
+      httpsRequired:"手机端麦克风需要 HTTPS，请使用 HTTPS 地址。",
+      sttFail:"语音转文字失败，请重试或输入。",
+      langUpdated:"语言已更新。现在可用该语言输入或语音。"
+    },
+
+    de: { langLabel:"Sprache", tag:"Gästeassistent", sub:"Fragen Sie nach Wi-Fi, Check-in/out, Hausregeln und Orten in der Nähe.", aptPrefix:"Apartment",
+      apiChecking:"API: prüfe…", apiOk:"API: OK", apiNotReady:"API: nicht bereit", apiOffline:"API: offline",
+      micReady:"Mic: bereit", micUnsupported:"Mic: nicht unterstützt", micNeedsHttps:"Mic: braucht HTTPS", micRecording:"Mic: Aufnahme…", micTranscribing:"Mic: Transkription…", micError:"Mic: Fehler",
+      placeholder:"Tippen oder sprechen Sie Ihre Frage…", send:"Senden",
+      tip:"Tipp: 🎙️ zum Aufnehmen tippen; erneut tippen zum Stoppen & Senden. Sie können tippen oder sprechen. Antworten können vorgelesen werden.",
+      greet:"Hallo! Fragen Sie alles zu Ihrem Aufenthalt — Wi-Fi, Check-in/out, Regeln und lokale Tipps.",
+      missingApt:"Diese Seite benötigt einen Apartment-Code. Beispiel: ?apt=YAKA01",
+      missingAptLong:"Dieser Link enthält keinen Apartment-Code. Bitte QR scannen oder mit ?apt=YAKA01 öffnen.",
+      speak:"🔊 Vorlesen", stop:"⏹ Stopp", generating:"Erstelle…", ttsFail:"Sprachausgabe nicht möglich.",
+      recNotSupported:"Sprachaufnahme wird in diesem Browser nicht unterstützt. Bitte tippen.",
+      httpsRequired:"Mikrofon benötigt HTTPS auf Mobilgeräten. Bitte HTTPS-URL verwenden.",
+      sttFail:"Spracherkennung fehlgeschlagen. Bitte erneut versuchen oder tippen.",
+      langUpdated:"Sprache aktualisiert. Sie können jetzt in dieser Sprache tippen oder sprechen."
+    },
+
+    pl: { langLabel:"Język", tag:"Asystent Gościa", sub:"Zapytaj o Wi-Fi, zameldowanie/wymeldowanie, zasady domu i miejsca w pobliżu.", aptPrefix:"Apartament",
+      apiChecking:"API: sprawdzanie…", apiOk:"API: OK", apiNotReady:"API: niegotowe", apiOffline:"API: offline",
+      micReady:"Mic: gotowy", micUnsupported:"Mic: brak wsparcia", micNeedsHttps:"Mic: wymaga HTTPS", micRecording:"Mic: nagrywanie…", micTranscribing:"Mic: transkrypcja…", micError:"Mic: błąd",
+      placeholder:"Wpisz lub powiedz pytanie…", send:"Wyślij",
+      tip:"Wskazówka: dotknij 🎙️ aby nagrać; dotknij ponownie, aby zatrzymać i wysłać. Możesz pisać lub mówić w wybranym języku. Odpowiedzi można odczytać na głos.",
+      greet:"Cześć! Zapytaj o wszystko dotyczące pobytu — Wi-Fi, zameldowanie/wymeldowanie, zasady i lokalne wskazówki.",
+      missingApt:"Ta strona wymaga kodu apartamentu. Przykład: ?apt=YAKA01",
+      missingAptLong:"W tym linku brakuje kodu apartamentu. Zeskanuj QR lub otwórz z ?apt=YAKA01.",
+      speak:"🔊 Odczytaj", stop:"⏹ Stop", generating:"Generowanie…", ttsFail:"Nie można odtworzyć głosu.",
+      recNotSupported:"Nagrywanie głosu nie jest wspierane w tej przeglądarce. Wpisz pytanie.",
+      httpsRequired:"Mikrofon na telefonach wymaga HTTPS. Użyj adresu HTTPS.",
+      sttFail:"Rozpoznawanie mowy nie powiodło się. Spróbuj ponownie lub wpisz.",
+      langUpdated:"Język zaktualizowany. Możesz teraz pisaesteśmy pisać lub mówić w tym języku."
+    },
+
+    fr: { langLabel:"Langue", tag:"Assistant Invité", sub:"Posez des questions sur le Wi-Fi, l’arrivée/départ, les règles et les lieux à proximité.", aptPrefix:"Appartement",
+      apiChecking:"API : vérification…", apiOk:"API : OK", apiNotReady:"API : non prête", apiOffline:"API : hors ligne",
+      micReady:"Micro : prêt", micUnsupported:"Micro : non pris en charge", micNeedsHttps:"Micro : HTTPS requis", micRecording:"Micro : enregistrement…", micTranscribing:"Micro : transcription…", micError:"Micro : erreur",
+      placeholder:"Tapez ou dites votre question…", send:"Envoyer",
+      tip:"Astuce : touchez 🎙️ pour enregistrer ; retouchez pour arrêter et envoyer. Vous pouvez taper ou parler. Les réponses peuvent être lues à voix haute.",
+      greet:"Bonjour ! Demandez tout sur votre séjour — Wi-Fi, arrivée/départ, règles et conseils locaux.",
+      missingApt:"Cette page nécessite un code d’appartement. Exemple : ?apt=YAKA01",
+      missingAptLong:"Ce lien n’a pas de code d’appartement. Scannez le QR ou ouvrez avec ?apt=YAKA01.",
+      speak:"🔊 Lire", stop:"⏹ Stop", generating:"Génération…", ttsFail:"Impossible de lire la voix.",
+      recNotSupported:"L’enregistrement vocal n’est pas pris en charge sur ce navigateur. Veuillez taper votre question.",
+      httpsRequired:"Le micro nécessite HTTPS sur mobile. Utilisez l’URL HTTPS.",
+      sttFail:"Échec de la reconnaissance vocale. Réessayez ou tapez.",
+      langUpdated:"Langue mise à jour. Vous pouvez maintenant taper ou parler dans cette langue."
+    },
+
+    hi: { langLabel:"भाषा", tag:"अतिथि सहायक", sub:"Wi-Fi, चेक-इन/आउट, घर के नियम और पास के स्थानों के बारे में पूछें।", aptPrefix:"अपार्टमेंट",
+      apiChecking:"API: जाँच हो रही है…", apiOk:"API: OK", apiNotReady:"API: तैयार नहीं", apiOffline:"API: ऑफ़लाइन",
+      micReady:"माइक: तैयार", micUnsupported:"माइक: समर्थित नहीं", micNeedsHttps:"माइक: HTTPS चाहिए", micRecording:"माइक: रिकॉर्डिंग…", micTranscribing:"माइक: लिख रहा है…", micError:"माइक: त्रुटि",
+      placeholder:"अपना सवाल लिखें या बोलें…", send:"भेजें",
+      tip:"टिप: 🎙️ दबाकर रिकॉर्ड करें; फिर से दबाकर रोकें और भेजें। आप चुनी हुई भाषा में लिख/बोल सकते हैं। जवाब ज़ोर से पढ़े जा सकते हैं।",
+      greet:"नमस्ते! अपने ठहरने के बारे में कुछ भी पूछें — Wi-Fi, चेक-इन/आउट, नियम और स्थानीय सुझाव।",
+      missingApt:"इस पेज को अपार्टमेंट कोड चाहिए। उदाहरण: ?apt=YAKA01",
+      missingAptLong:"इस लिंक में अपार्टमेंट कोड नहीं है। कृपया QR स्कैन करें या ?apt=YAKA01 के साथ खोलें।",
+      speak:"🔊 बोलें", stop:"⏹ रोकें", generating:"बन रहा है…", ttsFail:"आवाज़ नहीं चल पाई।",
+      recNotSupported:"इस ब्राउज़र में वॉयस रिकॉर्डिंग सपोर्ट नहीं है। कृपया लिखें।",
+      httpsRequired:"मोबाइल पर माइक्रोफ़ोन के लिए HTTPS चाहिए। HTTPS URL इस्तेमाल करें।",
+      sttFail:"वॉइस-टू-टेक्स्ट विफल। फिर से कोशिश करें या लिखें।",
+      langUpdated:"भाषा अपडेट हो गई। अब आप इस भाषा में लिख या बोल सकते हैं।"
+    },
+
+    pt: { langLabel:"Idioma", tag:"Assistente do Hóspede", sub:"Pergunte sobre Wi-Fi, check-in/out, regras da casa e locais próximos.", aptPrefix:"Apartamento",
+      apiChecking:"API: a verificar…", apiOk:"API: OK", apiNotReady:"API: não pronta", apiOffline:"API: offline",
+      micReady:"Mic: pronto", micUnsupported:"Mic: não suportado", micNeedsHttps:"Mic: precisa de HTTPS", micRecording:"Mic: a gravar…", micTranscribing:"Mic: a transcrever…", micError:"Mic: erro",
+      placeholder:"Escreva ou fale a sua pergunta…", send:"Enviar",
+      tip:"Dica: toque 🎙️ para gravar; toque novamente para parar e enviar. Pode escrever ou falar no idioma selecionado. As respostas podem ser lidas em voz alta.",
+      greet:"Olá! Pergunte qualquer coisa sobre a sua estadia — Wi-Fi, check-in/out, regras e dicas locais.",
+      missingApt:"Esta página precisa de um código de apartamento. Exemplo: ?apt=YAKA01",
+      missingAptLong:"Este link não tem código de apartamento. Leia o QR do apartamento ou abra com ?apt=YAKA01.",
+      speak:"🔊 Falar", stop:"⏹ Parar", generating:"A gerar…", ttsFail:"Não foi possível reproduzir a voz.",
+      recNotSupported:"A gravação de voz não é suportada neste navegador. Escreva a sua pergunta.",
+      httpsRequired:"O microfone precisa de HTTPS em telemóveis. Use o URL HTTPS.",
+      sttFail:"Falha ao converter voz em texto. Tente novamente ou escreva.",
+      langUpdated:"Idioma atualizado. Agora pode escrever ou falar neste idioma."
+    },
+
+    ar: { langLabel:"اللغة", tag:"مساعد الضيوف", sub:"اسأل عن الواي فاي، تسجيل الدخول/الخروج، قواعد المنزل، والأماكن القريبة.", aptPrefix:"الشقة",
+      apiChecking:"API: جارٍ الفحص…", apiOk:"API: يعمل", apiNotReady:"API: غير جاهز", apiOffline:"API: غير متصل",
+      micReady:"الميكروفون: جاهز", micUnsupported:"الميكروفون: غير مدعوم", micNeedsHttps:"الميكروفون: يحتاج HTTPS", micRecording:"الميكروفون: تسجيل…", micTranscribing:"الميكروفون: تحويل إلى نص…", micError:"الميكروفون: خطأ",
+      placeholder:"اكتب سؤالك أو تحدث…", send:"إرسال",
+      tip:"نصيحة: اضغط 🎙️ للتسجيل؛ اضغط مرة أخرى للإيقاف والإرسال. يمكنك الكتابة أو التحدث باللغة المحددة. يمكن قراءة الردود بصوت عالٍ.",
+      greet:"مرحباً! اسأل أي شيء عن إقامتك — الواي فاي، تسجيل الدخول/الخروج، القواعد، ونصائح محلية.",
+      missingApt:"هذه الصفحة تحتاج إلى رمز الشقة. مثال: ?apt=YAKA01",
+      missingAptLong:"هذا الرابط يفتقد رمز الشقة. الرجاء مسح رمز QR أو الفتح مع ?apt=YAKA01.",
+      speak:"🔊 تشغيل الصوت", stop:"⏹ إيقاف", generating:"جارٍ الإنشاء…", ttsFail:"تعذر تشغيل الصوت.",
+      recNotSupported:"التسجيل الصوتي غير مدعوم في هذا المتصفح. الرجاء الكتابة.",
+      httpsRequired:"الميكروفون يحتاج HTTPS على الهواتف. استخدم رابط HTTPS.",
+      sttFail:"فشل تحويل الصوت إلى نص. حاول مرة أخرى أو اكتب.",
+      langUpdated:"تم تحديث اللغة. يمكنك الآن الكتابة أو التحدث بهذه اللغة."
     }
   };
 
@@ -447,6 +632,16 @@
     const b = (navigator.language || 'en').toLowerCase();
     if (b.startsWith('si')) return 'si';
     if (b.startsWith('ta')) return 'ta';
+    if (b.startsWith('es')) return 'es';
+    if (b.startsWith('ru')) return 'ru';
+    if (b.startsWith('it')) return 'it';
+    if (b.startsWith('zh')) return 'zh';
+    if (b.startsWith('de')) return 'de';
+    if (b.startsWith('pl')) return 'pl';
+    if (b.startsWith('fr')) return 'fr';
+    if (b.startsWith('hi')) return 'hi';
+    if (b.startsWith('pt')) return 'pt';
+    if (b.startsWith('ar')) return 'ar';
     return 'en';
   }
 
@@ -465,6 +660,10 @@
 
   function applyLanguageToUi() {
     document.documentElement.lang = uiLang;
+
+    // RTL support for Arabic
+    document.documentElement.dir = (uiLang === 'ar') ? 'rtl' : 'ltr';
+
     langLabel.textContent = t('langLabel');
     tagText.textContent = t('tag');
     subText.textContent = t('sub');
@@ -472,9 +671,7 @@
     sendBtn.textContent = t('send');
     hintText.textContent = t('tip');
 
-    // refresh pills without losing current values
     aptPill.textContent = apt ? `${t('aptPrefix')}: ${apt}` : `${t('aptPrefix')}: (not set)`;
-    // api + mic pill will be refreshed by their own setters too
   }
 
   langSelect.addEventListener('change', () => {
@@ -482,25 +679,13 @@
     localStorage.setItem('yaka_ui_lang', uiLang);
     applyLanguageToUi();
 
-    // add a small message telling guests what to do
-    addBubble(
-      uiLang === 'en'
-        ? "Language updated. You can now type or speak in this language."
-        : uiLang === 'si'
-          ? "භාෂාව වෙනස් කළා. දැන් මේ භාෂාවෙන් type හෝ කතා කරන්න."
-          : "மொழி மாற்றப்பட்டது. இப்போது இந்த மொழியில் تایப்/பேசலாம்.",
-      'bot',
-      '',
-      { speak: true }
-    );
+    addBubble(t('langUpdated'), 'bot', '', { speak: true });
   });
 
   // Cache TTS audio by exact reply text
   const ttsCache = new Map(); // text -> blobUrl
 
-  // ----------------------------
-  // FIX 1: Prevent overlapping TTS
-  // ----------------------------
+  // Prevent overlapping TTS
   let currentTtsAudio = null;
   let currentTtsAbort = null;
 
@@ -548,7 +733,7 @@
     }
     div.appendChild(content);
 
-    // Add Speak (TTS) button on bot messages
+    // Speak (TTS) button on bot messages
     if (who === 'bot' && options.speak === true) {
       const row = document.createElement('div');
       row.style.marginTop = '10px';
@@ -567,7 +752,7 @@
       speakBtn.onclick = async () => {
         const oldLabel = speakBtn.textContent;
 
-        stopTtsPlayback(); // Always stop previous speech
+        stopTtsPlayback();
 
         speakBtn.disabled = true;
         speakBtn.textContent = t('generating');
@@ -818,7 +1003,7 @@
   // Apply language to UI first
   applyLanguageToUi();
 
-  // Initial UX bubbles (in selected UI language)
+  // Initial UX bubbles
   addBubble(t('greet'), 'bot', '', { speak: true });
   if (!apt) addBubble(t('missingApt'), 'bot', '', { speak: true });
 
