@@ -88,21 +88,41 @@
       filter: drop-shadow(0 12px 22px rgba(0,0,0,0.55));
     }
 
-    .brand h1{
-      margin: 0;
-      font-size: 28px;
-      letter-spacing: 0.4px;
-      font-weight: 800;
-      color: var(--yaka-grey);
-      text-transform: none;
-    }
-
     .brand .tag{
       margin-top: -6px;
       font-size: 14px;
       color: rgba(206,206,205,0.82);
       letter-spacing: 0.8px;
       text-transform: uppercase;
+    }
+
+    /* NEW: language row */
+    .lang-row{
+      position: relative;
+      z-index: 2;
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    .lang-row label{
+      font-size: 12px;
+      color: rgba(206,206,205,0.80);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .lang-row select{
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(206,206,205,0.22);
+      background: rgba(0,0,0,0.18);
+      color: var(--yaka-grey);
+      outline: none;
+      min-width: 220px;
     }
 
     .sub{
@@ -197,10 +217,10 @@
       flex:1;
       padding: 12px 12px;
       border-radius: 12px;
-      border: 1px solid var(--input-border);
+      border: 1px solid rgba(206,206,205,0.22);
       font-size: 16px;
       outline: none;
-      background: var(--input-bg);
+      background: rgba(206,206,205,0.08);
       color: var(--yaka-grey);
     }
 
@@ -225,9 +245,7 @@
       transition: transform .06s ease, opacity .15s ease, box-shadow .15s ease;
     }
 
-    button:active{
-      transform: translateY(1px);
-    }
+    button:active{ transform: translateY(1px); }
 
     .btn{
       background: var(--yaka-red);
@@ -259,6 +277,7 @@
     .small-btn{
       padding: 10px 12px;
       font-size: 14px;
+      margin-right: 8px;
     }
   </style>
 </head>
@@ -270,11 +289,23 @@
       <div class="header">
         <div class="brand">
           <img src="/logo.png" alt="YAKA Residences Logo" />
-          <div class="tag">Guest Assistant</div>
+          <div class="tag" id="tagText">Guest Assistant</div>
+
+          <!-- NEW: Language selector -->
+          <div class="lang-row">
+            <label>
+              <span id="langLabel">Language</span>
+              <select id="langSelect" aria-label="Select language">
+                <option value="en">English</option>
+                <option value="si">සිංහල (Sinhala)</option>
+                <option value="ta">தமிழ் (Tamil)</option>
+              </select>
+            </label>
+          </div>
         </div>
       </div>
 
-      <div class="sub">
+      <div class="sub" id="subText">
         Ask questions about Wi-Fi, check-in/out, house rules, and nearby places.
       </div>
 
@@ -292,7 +323,7 @@
           <button class="btn secondary" id="micBtn" type="button" title="Voice question" aria-label="Voice question">🎙️</button>
           <button class="btn" id="sendBtn" type="button">Send</button>
         </div>
-        <div class="hint">
+        <div class="hint" id="hintText">
           Tip: Tap 🎙️ to record, tap again to stop &amp; send. The bot can reply in your language and you can play replies aloud.
         </div>
       </div>
@@ -309,9 +340,160 @@
   const apiPill = document.getElementById('apiPill');
   const micPill = document.getElementById('micPill');
 
+  const tagText = document.getElementById('tagText');
+  const subText = document.getElementById('subText');
+  const hintText = document.getElementById('hintText');
+  const langSelect = document.getElementById('langSelect');
+  const langLabel = document.getElementById('langLabel');
+
   const params = new URLSearchParams(window.location.search);
   const apt = (params.get('apt') || '').trim();
   aptPill.textContent = apt ? `Apartment: ${apt}` : 'Apartment: (not set)';
+
+  // ----------------------------
+  // Language (multilingual UI)
+  // ----------------------------
+  const I18N = {
+    en: {
+      langLabel: "Language",
+      tag: "Guest Assistant",
+      sub: "Ask questions about Wi-Fi, check-in/out, house rules, and nearby places.",
+      aptPrefix: "Apartment",
+      apiChecking: "API: checking…",
+      apiOk: "API: OK",
+      apiNotReady: "API: not ready",
+      apiOffline: "API: offline",
+      micReady: "Mic: ready",
+      micUnsupported: "Mic: unsupported",
+      micNeedsHttps: "Mic: needs HTTPS",
+      micRecording: "Mic: recording…",
+      micTranscribing: "Mic: transcribing…",
+      micError: "Mic: error",
+      placeholder: "Type or speak your question…",
+      send: "Send",
+      tip: "Tip: Tap 🎙️ to record, tap again to stop & send. You can type or speak in your selected language. Replies can be read aloud.",
+      greet: "Hi! Ask me anything about your stay — Wi-Fi, check-in/out, house rules, and local tips.",
+      missingApt: "This page needs an apartment code. Example: ?apt=YAKA01",
+      missingAptLong: "This link is missing an apartment code. Please scan the apartment QR code or open with ?apt=YAKA01.",
+      speak: "🔊 Speak",
+      stop: "⏹ Stop",
+      generating: "Generating…",
+      ttsFail: "Could not play voice.",
+      recNotSupported: "Voice recording is not supported on this browser. Please type your question instead.",
+      httpsRequired: "Microphone needs HTTPS on mobiles. Use your Azure HTTPS URL (not HTTP).",
+      sttFail: "STT failed. Please try again or type your question."
+    },
+    si: {
+      langLabel: "භාෂාව",
+      tag: "අමුත්තන් සහායකය",
+      sub: "Wi-Fi, check-in/out, house rules සහ අවට ස්ථාන ගැන ප්‍රශ්න අහන්න.",
+      aptPrefix: "Apartment",
+      apiChecking: "API: පරීක්ෂා කරමින්…",
+      apiOk: "API: OK",
+      apiNotReady: "API: සූදානම් නැහැ",
+      apiOffline: "API: offline",
+      micReady: "Mic: ready",
+      micUnsupported: "Mic: unsupported",
+      micNeedsHttps: "Mic: HTTPS අවශ්‍යයි",
+      micRecording: "Mic: record කරමින්…",
+      micTranscribing: "Mic: ලියමින්…",
+      micError: "Mic: error",
+      placeholder: "Type කරන්න හෝ කතා කරලා අහන්න…",
+      send: "යවන්න",
+      tip: "ඉඟිය: 🎙️ ඔබා record කරන්න, නැවත ඔබලා stop කරලා යවන්න. ඔබේ තෝරාගත් භාෂාවෙන් type හෝ කතා කරන්න. පිළිතුරු ශබ්දයෙන් අහන්නත් පුළුවන්.",
+      greet: "ආයුබෝවන්! ඔබේ නවාතැන් ගැන ඕනෑම දෙයක් අහන්න — Wi-Fi, check-in/out, house rules, සහ local tips.",
+      missingApt: "මෙම පිටුවට apartment code එක අවශ්‍යයි. උදා: ?apt=YAKA01",
+      missingAptLong: "මෙම ලින්ක් එකට apartment code එක නැහැ. කරුණාකර apartment QR code එක scan කරන්න හෝ ?apt=YAKA01 සමඟ විවෘත කරන්න.",
+      speak: "🔊 කථනය",
+      stop: "⏹ නවත්වන්න",
+      generating: "තැනෙනවා…",
+      ttsFail: "ශබ්දය play කරන්න බැහැ.",
+      recNotSupported: "මෙම browser එකේ voice recording support නැහැ. කරුණාකර type කරන්න.",
+      httpsRequired: "මොබයිල් වල microphone සදහා HTTPS අවශ්‍යයි. Azure HTTPS URL එක භාවිතා කරන්න.",
+      sttFail: "Voice to text වැඩ කරුණාකර නැවත උත්සාහ කරන්න හෝ type කරන්න."
+    },
+    ta: {
+      langLabel: "மொழி",
+      tag: "விருந்தினர் உதவியாளர்",
+      sub: "Wi-Fi, check-in/out, house rules மற்றும் அருகிலுள்ள இடங்கள் பற்றி கேளுங்கள்.",
+      aptPrefix: "Apartment",
+      apiChecking: "API: சரிபார்க்கிறது…",
+      apiOk: "API: OK",
+      apiNotReady: "API: தயாரில்லை",
+      apiOffline: "API: offline",
+      micReady: "Mic: ready",
+      micUnsupported: "Mic: unsupported",
+      micNeedsHttps: "Mic: HTTPS தேவை",
+      micRecording: "Mic: பதிவு செய்கிறது…",
+      micTranscribing: "Mic: மாற்றுகிறது…",
+      micError: "Mic: error",
+      placeholder: "உங்கள் கேள்வியை تایப் செய்யவும் அல்லது பேசவும்…",
+      send: "Send",
+      tip: "குறிப்பு: 🎙️ ஐ தட்டிப் பதிவு செய்யவும்; மீண்டும் தட்டி நிறுத்தி அனுப்பவும். நீங்கள் தேர்ந்த மொழியில் تایப்/பேசலாம். பதிலை ஒலியாகக் கேட்கலாம்.",
+      greet: "வணக்கம்! உங்கள் தங்குமிடம் குறித்து எதையும் கேளுங்கள் — Wi-Fi, check-in/out, house rules, மற்றும் உள்ளூர் குறிப்புகள்.",
+      missingApt: "இந்த பக்கத்திற்கு apartment code தேவை. உதாரணம்: ?apt=YAKA01",
+      missingAptLong: "இந்த லிங்கில் apartment code இல்லை. QR code ஐ scan செய்யவும் அல்லது ?apt=YAKA01 உடன் திறக்கவும்.",
+      speak: "🔊 Speak",
+      stop: "⏹ Stop",
+      generating: "உருவாக்குகிறது…",
+      ttsFail: "ஒலியை இயக்க முடியவில்லை.",
+      recNotSupported: "இந்த browser இல் voice recording ஆதரவு இல்லை. தயவுசெய்து تایப் செய்யவும்.",
+      httpsRequired: "மொபைலில் microphone க்கு HTTPS தேவை. Azure HTTPS URL ஐ பயன்படுத்தவும்.",
+      sttFail: "STT தோல்வி. மீண்டும் முயற்சிக்கவும் அல்லது تایப் செய்யவும்."
+    }
+  };
+
+  function guessBrowserLang() {
+    const b = (navigator.language || 'en').toLowerCase();
+    if (b.startsWith('si')) return 'si';
+    if (b.startsWith('ta')) return 'ta';
+    return 'en';
+  }
+
+  function getUiLang() {
+    const saved = localStorage.getItem('yaka_ui_lang');
+    if (saved && I18N[saved]) return saved;
+    return guessBrowserLang();
+  }
+
+  let uiLang = getUiLang();
+  langSelect.value = uiLang;
+
+  function t(key) {
+    return (I18N[uiLang] && I18N[uiLang][key]) ? I18N[uiLang][key] : (I18N.en[key] || key);
+  }
+
+  function applyLanguageToUi() {
+    document.documentElement.lang = uiLang;
+    langLabel.textContent = t('langLabel');
+    tagText.textContent = t('tag');
+    subText.textContent = t('sub');
+    msgEl.placeholder = t('placeholder');
+    sendBtn.textContent = t('send');
+    hintText.textContent = t('tip');
+
+    // refresh pills without losing current values
+    aptPill.textContent = apt ? `${t('aptPrefix')}: ${apt}` : `${t('aptPrefix')}: (not set)`;
+    // api + mic pill will be refreshed by their own setters too
+  }
+
+  langSelect.addEventListener('change', () => {
+    uiLang = langSelect.value;
+    localStorage.setItem('yaka_ui_lang', uiLang);
+    applyLanguageToUi();
+
+    // add a small message telling guests what to do
+    addBubble(
+      uiLang === 'en'
+        ? "Language updated. You can now type or speak in this language."
+        : uiLang === 'si'
+          ? "භාෂාව වෙනස් කළා. දැන් මේ භාෂාවෙන් type හෝ කතා කරන්න."
+          : "மொழி மாற்றப்பட்டது. இப்போது இந்த மொழியில் تایப்/பேசலாம்.",
+      'bot',
+      '',
+      { speak: true }
+    );
+  });
 
   // Cache TTS audio by exact reply text
   const ttsCache = new Map(); // text -> blobUrl
@@ -323,13 +505,11 @@
   let currentTtsAbort = null;
 
   function stopTtsPlayback() {
-    // stop audio if playing
     if (currentTtsAudio) {
       try { currentTtsAudio.pause(); } catch {}
       try { currentTtsAudio.currentTime = 0; } catch {}
       currentTtsAudio = null;
     }
-    // cancel in-flight fetch
     if (currentTtsAbort) {
       try { currentTtsAbort.abort(); } catch {}
       currentTtsAbort = null;
@@ -348,8 +528,12 @@
     return withLinks.replace(/\n/g, '<br>');
   }
 
-  function setMicStatus(text) {
-    micPill.textContent = `Mic: ${text}`;
+  function setMicStatus(textKey) {
+    micPill.textContent = t(textKey);
+  }
+
+  function setApiStatus(textKey) {
+    apiPill.textContent = t(textKey);
   }
 
   function addBubble(text, who = 'bot', meta = '', options = {}) {
@@ -369,22 +553,26 @@
       const row = document.createElement('div');
       row.style.marginTop = '10px';
 
-      const btn = document.createElement('button');
-      btn.className = 'btn secondary small-btn';
-      btn.type = 'button';
-      btn.textContent = '🔊 Speak';
+      const speakBtn = document.createElement('button');
+      speakBtn.className = 'btn secondary small-btn';
+      speakBtn.type = 'button';
+      speakBtn.textContent = t('speak');
 
-      btn.onclick = async () => {
-        const oldLabel = btn.textContent;
+      const stopBtn = document.createElement('button');
+      stopBtn.className = 'btn secondary small-btn';
+      stopBtn.type = 'button';
+      stopBtn.textContent = t('stop');
+      stopBtn.onclick = () => stopTtsPlayback();
 
-        // Always stop whatever is currently speaking (prevents overlap)
-        stopTtsPlayback();
+      speakBtn.onclick = async () => {
+        const oldLabel = speakBtn.textContent;
 
-        btn.disabled = true;
-        btn.textContent = 'Generating…';
+        stopTtsPlayback(); // Always stop previous speech
+
+        speakBtn.disabled = true;
+        speakBtn.textContent = t('generating');
 
         try {
-          // Cached audio
           if (ttsCache.has(text)) {
             currentTtsAudio = new Audio(ttsCache.get(text));
             currentTtsAudio.onended = () => { currentTtsAudio = null; };
@@ -411,18 +599,18 @@
           currentTtsAudio.onended = () => { currentTtsAudio = null; };
           await currentTtsAudio.play();
         } catch (e) {
-          // Ignore abort errors (clicking Speak multiple times quickly)
           if (e?.name !== 'AbortError') {
-            alert('Could not play voice. ' + (e.message || e));
+            alert(t('ttsFail') + " " + (e.message || e));
           }
         } finally {
           currentTtsAbort = null;
-          btn.disabled = false;
-          btn.textContent = oldLabel;
+          speakBtn.disabled = false;
+          speakBtn.textContent = oldLabel;
         }
       };
 
-      row.appendChild(btn);
+      row.appendChild(speakBtn);
+      row.appendChild(stopBtn);
       div.appendChild(row);
     }
 
@@ -440,9 +628,9 @@
   async function pingApi() {
     try {
       const res = await fetch('/', { method: 'GET' });
-      apiPill.textContent = res.ok ? 'API: OK' : 'API: not ready';
+      setApiStatus(res.ok ? 'apiOk' : 'apiNotReady');
     } catch (e) {
-      apiPill.textContent = 'API: offline';
+      setApiStatus('apiOffline');
     }
   }
 
@@ -451,7 +639,7 @@
     if (!message) return;
 
     if (!apt) {
-      addBubble('This link is missing an apartment code. Please scan the apartment QR code or open with ?apt=YAKA01.', 'bot', '', { speak: true });
+      addBubble(t('missingAptLong'), 'bot', '', { speak: true });
       return;
     }
 
@@ -469,8 +657,8 @@
       });
 
       if (!res.ok) {
-        const t = await res.text();
-        addBubble('Sorry — something went wrong contacting the server.', 'bot', `HTTP ${res.status}: ${t.slice(0, 160)}`, { speak: true });
+        const tt = await res.text();
+        addBubble('Sorry — something went wrong contacting the server.', 'bot', `HTTP ${res.status}: ${tt.slice(0, 160)}`, { speak: true });
         return;
       }
 
@@ -492,7 +680,6 @@
     }
   }
 
-  // Typing + send button
   sendBtn.addEventListener('click', () => sendMessage());
   msgEl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') sendMessage();
@@ -504,10 +691,9 @@
   let mediaRecorder = null;
   let chunks = [];
   let isRecording = false;
-  let activeMimeType = ''; // chosen recorder mime
+  let activeMimeType = '';
 
   function getBestRecorderMimeType() {
-    // Prefer opus/webm where supported, otherwise fall back to mp4 (common on iOS/phones)
     const candidates = [
       'audio/webm;codecs=opus',
       'audio/webm',
@@ -515,10 +701,8 @@
       'audio/mpeg'
     ];
     if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
-    for (const t of candidates) {
-      try {
-        if (MediaRecorder.isTypeSupported(t)) return t;
-      } catch {}
+    for (const t0 of candidates) {
+      try { if (MediaRecorder.isTypeSupported(t0)) return t0; } catch {}
     }
     return '';
   }
@@ -527,40 +711,37 @@
     const m = (mime || '').toLowerCase();
     if (m.includes('mp4')) return 'mp4';
     if (m.includes('mpeg')) return 'mp3';
-    // default safe
     return 'webm';
   }
 
   async function startRecording() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setMicStatus('unsupported');
-      addBubble('Recording is not supported on this browser.', 'bot', '', { speak: true });
+      setMicStatus('micUnsupported');
+      addBubble(t('recNotSupported'), 'bot', '', { speak: true });
       return;
     }
 
-    // iOS Safari microphone requires HTTPS (or localhost)
     if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-      setMicStatus('needs https');
-      addBubble('Microphone needs HTTPS on mobiles. Use your Azure HTTPS URL (not HTTP).', 'bot', '', { speak: true });
+      setMicStatus('micNeedsHttps');
+      addBubble(t('httpsRequired'), 'bot', '', { speak: true });
       return;
     }
 
     if (!window.MediaRecorder) {
-      setMicStatus('unsupported');
-      addBubble('Voice recording is not supported on this mobile browser. Please type your question instead.', 'bot', '', { speak: true });
+      setMicStatus('micUnsupported');
+      addBubble(t('recNotSupported'), 'bot', '', { speak: true });
       return;
     }
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     chunks = [];
 
-    activeMimeType = getBestRecorderMimeType(); // may be ''
+    activeMimeType = getBestRecorderMimeType();
     try {
       mediaRecorder = activeMimeType
         ? new MediaRecorder(stream, { mimeType: activeMimeType })
         : new MediaRecorder(stream);
     } catch (e) {
-      // Some browsers are picky; try without mimeType
       mediaRecorder = new MediaRecorder(stream);
       activeMimeType = mediaRecorder.mimeType || '';
     }
@@ -570,9 +751,9 @@
     };
 
     mediaRecorder.onstop = async () => {
-      stream.getTracks().forEach(t => t.stop());
+      stream.getTracks().forEach(tk => tk.stop());
 
-      setMicStatus('transcribing…');
+      setMicStatus('micTranscribing');
 
       try {
         const mime = mediaRecorder.mimeType || activeMimeType || 'audio/webm';
@@ -580,7 +761,6 @@
 
         const blob = new Blob(chunks, { type: mime });
         const fd = new FormData();
-        // IMPORTANT: use filename that matches the actual mime type (fixes phone STT issues)
         fd.append('audio', blob, `audio.${ext}`);
 
         const r = await fetch('/api/stt', { method: 'POST', body: fd });
@@ -594,21 +774,21 @@
 
         if (!text) {
           addBubble("Sorry — I couldn't hear that. Please try again.", 'bot', '', { speak: true });
-          setMicStatus('ready');
+          setMicStatus('micReady');
           return;
         }
 
-        setMicStatus('ready');
+        setMicStatus('micReady');
         await sendMessage(text);
       } catch (e) {
-        setMicStatus('error');
-        addBubble('STT failed. Please try again or type your question.', 'bot', e.message || String(e), { speak: true });
-        setMicStatus('ready');
+        setMicStatus('micError');
+        addBubble(t('sttFail'), 'bot', e.message || String(e), { speak: true });
+        setMicStatus('micReady');
       }
     };
 
     mediaRecorder.start();
-    setMicStatus('recording…');
+    setMicStatus('micRecording');
   }
 
   function stopRecording() {
@@ -629,17 +809,21 @@
     } catch (e) {
       isRecording = false;
       micBtn.textContent = '🎙️';
-      setMicStatus('error');
+      setMicStatus('micError');
       addBubble('Could not start recording.', 'bot', e.message || String(e), { speak: true });
-      setMicStatus('ready');
+      setMicStatus('micReady');
     }
   });
 
-  // Initial UX
-  addBubble('Hi! Ask me anything about your stay — Wi-Fi, check-in/out, house rules, and local tips.', 'bot', '', { speak: true });
-  if (!apt) addBubble('This page needs an apartment code. Example: ?apt=YAKA01', 'bot', '', { speak: true });
+  // Apply language to UI first
+  applyLanguageToUi();
 
-  setMicStatus('ready');
+  // Initial UX bubbles (in selected UI language)
+  addBubble(t('greet'), 'bot', '', { speak: true });
+  if (!apt) addBubble(t('missingApt'), 'bot', '', { speak: true });
+
+  setMicStatus('micReady');
+  setApiStatus('apiChecking');
   pingApi();
   msgEl.focus();
 </script>
