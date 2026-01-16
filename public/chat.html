@@ -35,7 +35,6 @@
       background: var(--yaka-dark);
       color: var(--text);
       min-height: 100vh;
-      /* subtle modern glow */
       background-image:
         radial-gradient(900px 520px at 10% 5%, rgba(122,19,21,0.35), transparent 55%),
         radial-gradient(900px 520px at 90% 15%, rgba(206,206,205,0.14), transparent 55%),
@@ -57,7 +56,6 @@
       backdrop-filter: blur(10px);
     }
 
-    /* ---------- Header (logo centred) ---------- */
     .header{
       padding: 22px 18px 14px;
       text-align: center;
@@ -84,7 +82,7 @@
     }
 
     .brand img{
-      height: 200px;     /* bigger logo */
+      height: 200px;
       width: auto;
       display: block;
       filter: drop-shadow(0 12px 22px rgba(0,0,0,0.55));
@@ -116,7 +114,6 @@
       background: rgba(0,0,0,0.08);
     }
 
-    /* ---------- Status pills ---------- */
     .status{
       padding: 10px 18px;
       font-size: 12px;
@@ -135,7 +132,6 @@
       color: rgba(206,206,205,0.92);
     }
 
-    /* ---------- Chat area ---------- */
     .chat{
       padding: 16px 18px;
       display: flex;
@@ -185,7 +181,6 @@
       margin-top: 8px;
     }
 
-    /* ---------- Input area ---------- */
     .input-area{
       padding: 14px 18px;
       border-top: 1px solid rgba(206,206,205,0.10);
@@ -298,7 +293,7 @@
           <button class="btn" id="sendBtn" type="button">Send</button>
         </div>
         <div class="hint">
-          Tip: Tap 🎙️ to record, tap again to stop & send. The bot can reply in your language and you can play replies aloud.
+          Tip: Tap 🎙️ to record, tap again to stop &amp; send. The bot can reply in your language and you can play replies aloud.
         </div>
       </div>
 
@@ -316,11 +311,30 @@
 
   const params = new URLSearchParams(window.location.search);
   const apt = (params.get('apt') || '').trim();
-
   aptPill.textContent = apt ? `Apartment: ${apt}` : 'Apartment: (not set)';
 
   // Cache TTS audio by exact reply text
   const ttsCache = new Map(); // text -> blobUrl
+
+  // ----------------------------
+  // FIX 1: Prevent overlapping TTS
+  // ----------------------------
+  let currentTtsAudio = null;
+  let currentTtsAbort = null;
+
+  function stopTtsPlayback() {
+    // stop audio if playing
+    if (currentTtsAudio) {
+      try { currentTtsAudio.pause(); } catch {}
+      try { currentTtsAudio.currentTime = 0; } catch {}
+      currentTtsAudio = null;
+    }
+    // cancel in-flight fetch
+    if (currentTtsAbort) {
+      try { currentTtsAbort.abort(); } catch {}
+      currentTtsAbort = null;
+    }
+  }
 
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, m => ({
@@ -329,7 +343,6 @@
   }
 
   function linkify(text) {
-    // Convert URLs to clickable links, preserve line breaks
     const safe = escapeHtml(text);
     const withLinks = safe.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
     return withLinks.replace(/\n/g, '<br>');
@@ -362,33 +375,48 @@
       btn.textContent = '🔊 Speak';
 
       btn.onclick = async () => {
-        btn.disabled = true;
         const oldLabel = btn.textContent;
+
+        // Always stop whatever is currently speaking (prevents overlap)
+        stopTtsPlayback();
+
+        btn.disabled = true;
         btn.textContent = 'Generating…';
+
         try {
-          // Use cached audio if available
+          // Cached audio
           if (ttsCache.has(text)) {
-            const audio = new Audio(ttsCache.get(text));
-            await audio.play();
+            currentTtsAudio = new Audio(ttsCache.get(text));
+            currentTtsAudio.onended = () => { currentTtsAudio = null; };
+            await currentTtsAudio.play();
             return;
           }
+
+          currentTtsAbort = new AbortController();
 
           const r = await fetch('/api/tts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            signal: currentTtsAbort.signal,
             body: JSON.stringify({ text })
           });
+
           if (!r.ok) throw new Error(await r.text());
 
           const blob = await r.blob();
           const url = URL.createObjectURL(blob);
           ttsCache.set(text, url);
 
-          const audio = new Audio(url);
-          await audio.play();
+          currentTtsAudio = new Audio(url);
+          currentTtsAudio.onended = () => { currentTtsAudio = null; };
+          await currentTtsAudio.play();
         } catch (e) {
-          alert('Could not play voice. ' + (e.message || e));
+          // Ignore abort errors (clicking Speak multiple times quickly)
+          if (e?.name !== 'AbortError') {
+            alert('Could not play voice. ' + (e.message || e));
+          }
         } finally {
+          currentTtsAbort = null;
           btn.disabled = false;
           btn.textContent = oldLabel;
         }
@@ -476,6 +504,32 @@
   let mediaRecorder = null;
   let chunks = [];
   let isRecording = false;
+  let activeMimeType = ''; // chosen recorder mime
+
+  function getBestRecorderMimeType() {
+    // Prefer opus/webm where supported, otherwise fall back to mp4 (common on iOS/phones)
+    const candidates = [
+      'audio/webm;codecs=opus',
+      'audio/webm',
+      'audio/mp4',
+      'audio/mpeg'
+    ];
+    if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
+    for (const t of candidates) {
+      try {
+        if (MediaRecorder.isTypeSupported(t)) return t;
+      } catch {}
+    }
+    return '';
+  }
+
+  function extensionForMime(mime) {
+    const m = (mime || '').toLowerCase();
+    if (m.includes('mp4')) return 'mp4';
+    if (m.includes('mpeg')) return 'mp3';
+    // default safe
+    return 'webm';
+  }
 
   async function startRecording() {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -484,17 +538,33 @@
       return;
     }
 
-    // Microphone on iOS Safari requires HTTPS (or localhost)
+    // iOS Safari microphone requires HTTPS (or localhost)
     if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
       setMicStatus('needs https');
-      addBubble('Microphone needs HTTPS on mobiles. Use your Azure HTTPS URL or an HTTPS tunnel for testing.', 'bot', '', { speak: true });
+      addBubble('Microphone needs HTTPS on mobiles. Use your Azure HTTPS URL (not HTTP).', 'bot', '', { speak: true });
+      return;
+    }
+
+    if (!window.MediaRecorder) {
+      setMicStatus('unsupported');
+      addBubble('Voice recording is not supported on this mobile browser. Please type your question instead.', 'bot', '', { speak: true });
       return;
     }
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     chunks = [];
 
-    mediaRecorder = new MediaRecorder(stream);
+    activeMimeType = getBestRecorderMimeType(); // may be ''
+    try {
+      mediaRecorder = activeMimeType
+        ? new MediaRecorder(stream, { mimeType: activeMimeType })
+        : new MediaRecorder(stream);
+    } catch (e) {
+      // Some browsers are picky; try without mimeType
+      mediaRecorder = new MediaRecorder(stream);
+      activeMimeType = mediaRecorder.mimeType || '';
+    }
+
     mediaRecorder.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) chunks.push(e.data);
     };
@@ -504,13 +574,20 @@
 
       setMicStatus('transcribing…');
 
-      const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
-      const fd = new FormData();
-      fd.append('audio', blob, 'audio.webm');
-
       try {
+        const mime = mediaRecorder.mimeType || activeMimeType || 'audio/webm';
+        const ext = extensionForMime(mime);
+
+        const blob = new Blob(chunks, { type: mime });
+        const fd = new FormData();
+        // IMPORTANT: use filename that matches the actual mime type (fixes phone STT issues)
+        fd.append('audio', blob, `audio.${ext}`);
+
         const r = await fetch('/api/stt', { method: 'POST', body: fd });
-        if (!r.ok) throw new Error(await r.text());
+        if (!r.ok) {
+          const errText = await r.text();
+          throw new Error(errText || `HTTP ${r.status}`);
+        }
 
         const data = await r.json();
         const text = (data.text || '').trim();
@@ -525,7 +602,7 @@
         await sendMessage(text);
       } catch (e) {
         setMicStatus('error');
-        addBubble('Voice transcription failed.', 'bot', e.message || String(e), { speak: true });
+        addBubble('STT failed. Please try again or type your question.', 'bot', e.message || String(e), { speak: true });
         setMicStatus('ready');
       }
     };
@@ -564,7 +641,7 @@
 
   setMicStatus('ready');
   pingApi();
-  msgEl.focus(); // ensure typing works immediately
+  msgEl.focus();
 </script>
 
 </body>
