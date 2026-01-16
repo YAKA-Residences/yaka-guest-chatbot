@@ -13,9 +13,14 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
 const port = process.env.PORT || 3000;
-const SERVER_VERSION = "2026-01-15-DEPLOY-TEST";
-app.get("/debug/version", (req, res) => res.json({ version: SERVER_VERSION }));
+
+// -------------------------------
+// VERSION (single source of truth)
+// -------------------------------
+const SERVER_VERSION = "2026-01-16-FAQ-first-hours-fix";
 console.log("SERVER.JS VERSION:", SERVER_VERSION);
+
+// middleware
 app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static('public'));
@@ -33,11 +38,6 @@ const PLACES_MAX_RESULTS = parseInt(process.env.PLACES_MAX_RESULTS || '5', 10);
 const TTS_MODEL = process.env.OPENAI_TTS_MODEL || 'gpt-4o-mini-tts';
 const TTS_VOICE = process.env.OPENAI_TTS_VOICE || 'alloy';
 const STT_MODEL = process.env.OPENAI_STT_MODEL || 'gpt-4o-mini-transcribe';
-
-// ---- Version stamp (so you can confirm Azure is running this exact file) ----
-//const SERVER_VERSION = '2026-01-15T20:XXZ-global-faq-fix';
-console.log('SERVER.JS VERSION:', SERVER_VERSION);
-console.log("SERVER.JS VERSION: 2026-01-15-DEPLOY-TEST");
 
 if (!OPENAI_API_KEY) {
   console.error('Warning: Missing OPENAI_API_KEY in .env - embeddings, chat, STT and TTS will fail.');
@@ -164,13 +164,13 @@ async function loadAllData() {
       readSheetByTitleUsingGoogleApi('FAQs', sheetsApi, spreadsheetId),
     ]);
 
-    // ---- Diagnostics (very useful on Azure) ----
+    // ---- Diagnostics (useful on Azure) ----
     console.log('Google Sheets ID ending:', String(spreadsheetId).slice(-6));
     console.log('FAQs rows read:', faqsRows.length);
     console.log('FAQ headers detected:', faqsRows[0] ? Object.keys(faqsRows[0]) : '(none)');
     console.log('Sample apt_id values:', faqsRows.slice(0, 10).map(r => r.apt_id));
 
-    // ---- Build FAQ map + global FAQs (FIXED) ----
+    // ---- Build FAQ map + global FAQs ----
     const faqMap = {};
     const globalFaqs = [];
 
@@ -184,9 +184,7 @@ async function loadAllData() {
         _embedding: null
       };
 
-      // Treat blank / ALL / GLOBAL etc as global FAQs
       if (isGlobalAptId(aptRaw)) {
-        // Avoid adding empty rows
         if ((item.question || '').trim() || (item.answer || '').trim()) {
           globalFaqs.push(item);
         }
@@ -215,15 +213,7 @@ async function loadAllData() {
 loadAllData();
 
 // -------------------------------
-// Apartment helpers
-// -------------------------------
-function getApartmentById(aptId) {
-  const id = (aptId || '').trim();
-  return APARTMENTS.find(a => ((a.apt_id || '') + '').trim() === id) || null;
-}
-
-// -------------------------------
-// LocalGuide: named place + directions handling
+// Helpers
 // -------------------------------
 function norm(s) {
   return (s || '')
@@ -251,7 +241,70 @@ function isDirectionsQuestion(message) {
   );
 }
 
-// Finds best matching LocalGuide row for this apt (or ALL) by place NAME
+// NEW: opening-hours intent (so FAQ should win)
+function isOpeningHoursQuestion(message) {
+  const s = norm(message);
+  return (
+    s.includes('open late') ||
+    s.includes('open now') ||
+    s.includes('opening hours') ||
+    s.includes('opening hour') ||
+    s.includes('hours') ||
+    s.includes('closing') ||
+    s.includes('close at') ||
+    s.includes('closes at') ||
+    s.includes('until when') ||
+    s.includes('till when')
+  );
+}
+
+function getApartmentById(aptId) {
+  const id = (aptId || '').trim();
+  return APARTMENTS.find(a => ((a.apt_id || '') + '').trim() === id) || null;
+}
+
+// -------------------------------
+// Keyword FAQ match (works even when OpenAI blocked)
+// -------------------------------
+function keywordFaqMatch(allFaqs, message) {
+  const msg = norm(message);
+  const tokens = msg.split(' ').filter(t => t.length >= 3);
+
+  let best = null;
+
+  for (const f of (allFaqs || [])) {
+    const q = norm(f.question || '');
+    const a = norm(f.answer || '');
+    if (!q && !a) continue;
+
+    let score = 0;
+
+    // strong signals
+    if (q && msg.includes(q)) score += 80 + q.length;
+    if (a && msg.includes(a)) score += 10;
+
+    // token overlap with question text
+    const hits = tokens.filter(t => q.includes(t)).length;
+    score += hits * 6;
+
+    // hours/open-late boost
+    if (isOpeningHoursQuestion(message) && (q.includes('open') || q.includes('hour') || q.includes('late') || q.includes('supermarket'))) {
+      score += 15;
+    }
+
+    if (!best || score > best.score) {
+      best = { score, faq: f };
+    }
+  }
+
+  // threshold to avoid random matches
+  if (best && best.score >= 18) return best;
+  return null;
+}
+
+// -------------------------------
+// LocalGuide matching (unchanged)
+// -------------------------------
 function findLocalGuidePlace(aptId, message) {
   const msg = norm(message);
   const apt = (aptId || '').trim();
@@ -268,16 +321,12 @@ function findLocalGuidePlace(aptId, message) {
       if (!n) return null;
 
       let score = 0;
-
-      // strong match if full name is in the message
       if (msg.includes(n)) score = 100 + n.length;
 
-      // token overlap boost
       const tokens = msg.split(' ').filter(t => t.length >= 3);
       const hits = tokens.filter(t => n.includes(t)).length;
       score += hits * 5;
 
-      // slight boost if asking directions
       if (isDirectionsQuestion(message)) score += 10;
 
       return { row: r, score };
@@ -285,7 +334,6 @@ function findLocalGuidePlace(aptId, message) {
     .filter(Boolean)
     .sort((a, b) => b.score - a.score);
 
-  // Prevent accidental matches
   if (scored.length && scored[0].score >= 30) return scored[0].row;
   return null;
 }
@@ -314,8 +362,7 @@ function formatLocalGuideReply(placeRow, message) {
 }
 
 // -------------------------------
-// LocalGuide: "nearest <category>" handling
-// Uses LocalGuide columns: apt_id, category, name, distance, description, maps_link
+// LocalGuide nearest category (unchanged)
 // -------------------------------
 function normaliseCategory(s) {
   return (s || '').toString().trim().toLowerCase();
@@ -332,7 +379,7 @@ function distanceToMetres(distanceStr) {
   if (m) return parseFloat(m[1]);
 
   const mins = s.match(/([\d.]+)\s*(min|mins|minute|minutes)\b/);
-  if (mins) return parseFloat(mins[1]) * 80; // heuristic
+  if (mins) return parseFloat(mins[1]) * 80;
 
   const num = s.match(/([\d.]+)/);
   if (num) return parseFloat(num[1]);
@@ -345,82 +392,33 @@ function getLocalGuideRowsForApt(aptId) {
   return (LOCAL_GUIDE || []).filter(r => ((r.apt_id || '') + '').trim() === id);
 }
 
-// Detect "nearest/closest <category>" intent from message
 function detectNearestCategoryIntent(message) {
   const s = norm(message);
 
-  if (
-    s.includes('nearest supermarket') ||
-    s.includes('closest supermarket') ||
-    s.includes('nearest grocery') ||
-    s.includes('closest grocery') ||
-    s.includes('nearest groceries') ||
-    s.includes('nearest grocery store') ||
-    s.includes('closest grocery store') ||
-    s.includes('where is the nearest supermarket') ||
-    s.includes('where is nearest supermarket')
-  ) {
+  if (s.includes('nearest supermarket') || s.includes('closest supermarket') || s.includes('nearest grocery') || s.includes('closest grocery') || s.includes('nearest groceries') || s.includes('nearest grocery store') || s.includes('closest grocery store') || s.includes('where is the nearest supermarket') || s.includes('where is nearest supermarket')) {
     return { category: 'supermarket', label: 'supermarket' };
   }
-
-  if (
-    s.includes('nearest atm') ||
-    s.includes('closest atm') ||
-    s.includes('nearest cash machine') ||
-    s.includes('closest cash machine') ||
-    s.includes('where is the nearest atm') ||
-    s.includes('where is nearest atm')
-  ) {
+  if (s.includes('nearest atm') || s.includes('closest atm') || s.includes('nearest cash machine') || s.includes('closest cash machine') || s.includes('where is the nearest atm') || s.includes('where is nearest atm')) {
     return { category: 'atm', label: 'ATM' };
   }
-
-  if (
-    s.includes('nearest pharmacy') ||
-    s.includes('closest pharmacy') ||
-    s.includes('nearest chemist') ||
-    s.includes('closest chemist') ||
-    s.includes('where is the nearest pharmacy') ||
-    s.includes('where is nearest pharmacy')
-  ) {
+  if (s.includes('nearest pharmacy') || s.includes('closest pharmacy') || s.includes('nearest chemist') || s.includes('closest chemist') || s.includes('where is the nearest pharmacy') || s.includes('where is nearest pharmacy')) {
     return { category: 'pharmacy', label: 'pharmacy' };
   }
-
-  if (
-    s.includes('nearest cafe') ||
-    s.includes('closest cafe') ||
-    s.includes('nearest coffee') ||
-    s.includes('closest coffee')
-  ) {
+  if (s.includes('nearest cafe') || s.includes('closest cafe') || s.includes('nearest coffee') || s.includes('closest coffee')) {
     return { category: 'cafe', label: 'café' };
   }
-
-  if (
-    s.includes('nearest restaurant') ||
-    s.includes('closest restaurant') ||
-    s.includes('where can i eat nearby') ||
-    s.includes('eat nearby')
-  ) {
+  if (s.includes('nearest restaurant') || s.includes('closest restaurant') || s.includes('where can i eat nearby') || s.includes('eat nearby')) {
     return { category: 'restaurant', label: 'restaurant' };
   }
-
-  if (
-    s.includes('nearest attraction') ||
-    s.includes('closest attraction') ||
-    s.includes('things to do nearby') ||
-    s.includes('nearby attractions')
-  ) {
+  if (s.includes('nearest attraction') || s.includes('closest attraction') || s.includes('things to do nearby') || s.includes('nearby attractions')) {
     return { category: 'attraction', label: 'attraction' };
   }
-
   return null;
 }
 
 function getNearestFromLocalGuide(aptId, category) {
-  const rows = getLocalGuideRowsForApt(aptId)
-    .filter(r => normaliseCategory(r.category) === normaliseCategory(category));
-
+  const rows = getLocalGuideRowsForApt(aptId).filter(r => normaliseCategory(r.category) === normaliseCategory(category));
   if (!rows.length) return null;
-
   rows.sort((a, b) => distanceToMetres(a.distance) - distanceToMetres(b.distance));
   return rows[0];
 }
@@ -439,12 +437,11 @@ function formatLocalGuideNearestReply(row, label) {
 
   if (desc) out += `\n\nDirections: ${desc}`;
   if (link) out += `\n\nGoogle Maps:\n${link}`;
-
   return out.trim();
 }
 
 // -------------------------------
-// Nearby intent (avoid hijacking "How do I get to SPAR")
+// Nearby intent (unchanged)
 // -------------------------------
 function detectNearbyIntent(message) {
   const s = (message || '').toLowerCase();
@@ -710,18 +707,18 @@ function formatPlacesReply(label, places) {
 // -------------------------------
 app.get('/', (req, res) => res.send('Yaka chatbot backend is running!'));
 
+app.get('/debug/version', (req, res) => {
+  res.json({ version: SERVER_VERSION });
+});
+
 app.get('/debug/faq-data', (req, res) => {
   res.json({
-    version: "DEPLOY-TEST-2026-01-15-01",
+    version: SERVER_VERSION,
     apartmentsCount: APARTMENTS.length,
     localGuideCount: LOCAL_GUIDE.length,
     faqApartments: Object.keys(FAQ_DATA),
     globalFaqCount: GLOBAL_FAQS.length
   });
-});
-console.log("SERVER.JS VERSION:", SERVER_VERSION);
-app.get('/debug/version', (req, res) => {
-  res.json({ version: SERVER_VERSION });
 });
 
 app.post('/api/chat', async (req, res) => {
@@ -772,9 +769,49 @@ app.post('/api/chat', async (req, res) => {
       });
     }
 
-    // 3) Generic nearby places via Google Places
+    // -------------------------
+    // IMPORTANT CHANGE:
+    // FAQ FIRST for "opening hours/open late" questions
+    // -------------------------
+    const preferFaq = isOpeningHoursQuestion(message);
+
+    // 3a) Keyword FAQ fallback first (works without OpenAI)
+    if (preferFaq) {
+      const combinedFaqs = [...(FAQ_DATA[apt] || []), ...GLOBAL_FAQS];
+      const kw = keywordFaqMatch(combinedFaqs, message);
+      if (kw && kw.faq?.answer) {
+        let answerText = kw.faq.answer;
+        if (userLang !== 'en') answerText = await translateText(answerText, userLang);
+        return res.json({
+          reply: answerText,
+          source: 'faq_keyword',
+          score: kw.score,
+          detected_language: userLang
+        });
+      }
+    }
+
+    // 3b) Embedding FAQ match (if OpenAI available)
+    const { topMatches } = await findBestMatches(FAQ_DATA[apt] || [], message, 5);
+    const best = topMatches[0] || null;
+    const bestScore = best ? best._score : 0;
+
+    if (best && bestScore >= EMB_THRESHOLD) {
+      let answerText = best.answer || '';
+      if (userLang !== 'en') answerText = await translateText(answerText, userLang);
+
+      return res.json({
+        reply: answerText,
+        source: 'faq',
+        score: bestScore,
+        matches: topMatches.slice(0, 3),
+        detected_language: userLang
+      });
+    }
+
+    // 4) Google Places only if NOT preferFaq (or FAQ didn’t have it)
     const intent = detectNearbyIntent(message);
-    if (intent) {
+    if (intent && !preferFaq) {
       const aptRow = getApartmentById(apt);
       const lat = aptRow?.lat;
       const lng = aptRow?.lng;
@@ -803,24 +840,6 @@ app.post('/api/chat', async (req, res) => {
         if (userLang !== 'en') replyText = await translateText(replyText, userLang);
         return res.json({ reply: replyText, source: 'google_places_error', detected_language: userLang });
       }
-    }
-
-    // 4) FAQ embeddings (resilient if OpenAI is blocked)
-    const { topMatches } = await findBestMatches(FAQ_DATA[apt] || [], message, 5);
-    const best = topMatches[0] || null;
-    const bestScore = best ? best._score : 0;
-
-    if (best && bestScore >= EMB_THRESHOLD) {
-      let answerText = best.answer || '';
-      if (userLang !== 'en') answerText = await translateText(answerText, userLang);
-
-      return res.json({
-        reply: answerText,
-        source: 'faq',
-        score: bestScore,
-        matches: topMatches.slice(0, 3),
-        detected_language: userLang
-      });
     }
 
     // 5) LLM fallback
@@ -898,7 +917,7 @@ app.post('/api/stt', upload.single('audio'), async (req, res) => {
     const form = new FormData();
     form.append('model', STT_MODEL);
     form.append('file', req.file.buffer, {
-      filename: 'audio.webm',
+      filename: req.file.originalname || 'audio.webm',
       contentType: req.file.mimetype || 'audio/webm'
     });
 
