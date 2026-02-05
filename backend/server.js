@@ -263,6 +263,7 @@ function getApartmentById(aptId) {
   return APARTMENTS.find(a => ((a.apt_id || '') + '').trim() === id) || null;
 }
 
+
 // -------------------------------
 // Keyword FAQ match (works even when OpenAI blocked)
 // -------------------------------
@@ -360,12 +361,48 @@ function formatLocalGuideReply(placeRow, message) {
   if (link) out += `\n\nGoogle Maps:\n${link}`;
   return out.trim();
 }
+function getNearestListFromLocalGuide(aptId, category, limit = 3) {
+  const rows = getLocalGuideRowsForAptOrAll(aptId)
+    .filter(r => normaliseCategory(r.category) === normaliseCategory(category));
+
+  if (!rows.length) return [];
+
+  rows.sort((a, b) => {
+    const aM = toNumber(a.sort_mins, Number.POSITIVE_INFINITY);
+    const bM = toNumber(b.sort_mins, Number.POSITIVE_INFINITY);
+    if (aM !== bM) return aM - bM;
+    return distanceToMetres(a.distance) - distanceToMetres(b.distance);
+  });
+
+  return rows.slice(0, limit);
+}
+
+function formatLocalGuideNearestListReply(rows, label) {
+  if (!rows || rows.length === 0) return null;
+
+  const lines = rows.map((r, i) => {
+    const name = (r.name || '').toString().trim() || 'Unknown';
+    const dist = (r.distance || '').toString().trim();
+    const link = (r.maps_link || '').toString().trim();
+
+    let line = `${i + 1}. ${name}`;
+    if (dist) line += ` — ${dist}`;
+    if (link) line += `\n   ${link}`;
+    return line;
+  });
+
+  return `Nearest ${label} options:\n\n${lines.join('\n\n')}`.trim();
+}
 
 // -------------------------------
 // LocalGuide nearest category + list (UPDATED to support sort_mins + ALL rows)
 // -------------------------------
 function normaliseCategory(s) {
-  return (s || '').toString().trim().toLowerCase();
+  return (s || '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ''); // removes spaces, hyphens, punctuation
 }
 
 function distanceToMetres(distanceStr) {
@@ -795,26 +832,28 @@ app.post('/api/chat', async (req, res) => {
 
     // 1) Nearest <category> from LocalGuide first
     const nearestIntent = detectNearestCategoryIntent(message);
-    if (nearestIntent) {
-      const nearestRow = getNearestFromLocalGuide(apt, nearestIntent.category);
+if (nearestIntent) {
+  const rows = getNearestListFromLocalGuide(apt, nearestIntent.category, 3);
 
-      if (nearestRow) {
-        let replyText = formatLocalGuideNearestReply(nearestRow, nearestIntent.label);
-        if (userLang !== 'en') replyText = await translateText(replyText, userLang);
+  if (rows.length) {
+    let replyText = formatLocalGuideNearestListReply(rows, nearestIntent.label);
+    if (userLang !== 'en') replyText = await translateText(replyText, userLang);
 
-        return res.json({
-          reply: replyText,
-          source: 'local_guide_nearest',
-          detected_language: userLang,
-          place: {
-            category: nearestRow.category || '',
-            name: nearestRow.name || '',
-            distance: nearestRow.distance || '',
-            maps_link: nearestRow.maps_link || ''
-          }
-        });
-      }
-    }
+    return res.json({
+      reply: replyText,
+      source: 'local_guide_nearest_list',
+      detected_language: userLang,
+      results_count: rows.length,
+      places: rows.map(r => ({
+        category: r.category || '',
+        name: r.name || '',
+        distance: r.distance || '',
+        maps_link: r.maps_link || ''
+      }))
+    });
+  }
+}
+
 
     // 2) Named LocalGuide place match
     const matchedPlace = findLocalGuidePlace(apt, message);
