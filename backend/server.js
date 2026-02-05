@@ -17,7 +17,7 @@ const port = process.env.PORT || 3000;
 // -------------------------------
 // VERSION (single source of truth)
 // -------------------------------
-const SERVER_VERSION = "2026-01-16-FAQ-first-hours-fix";
+const SERVER_VERSION = "2026-02-05-localguide-list-sortmins";
 console.log("SERVER.JS VERSION:", SERVER_VERSION);
 
 // middleware
@@ -362,7 +362,7 @@ function formatLocalGuideReply(placeRow, message) {
 }
 
 // -------------------------------
-// LocalGuide nearest category (unchanged)
+// LocalGuide nearest category + list (UPDATED to support sort_mins + ALL rows)
 // -------------------------------
 function normaliseCategory(s) {
   return (s || '').toString().trim().toLowerCase();
@@ -387,9 +387,22 @@ function distanceToMetres(distanceStr) {
   return Number.POSITIVE_INFINITY;
 }
 
-function getLocalGuideRowsForApt(aptId) {
+function toNumber(v, fallback = Number.POSITIVE_INFINITY) {
+  const n = Number(String(v ?? '').trim());
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function getLocalGuideRowsForAptOrAll(aptId) {
   const id = (aptId || '').trim();
-  return (LOCAL_GUIDE || []).filter(r => ((r.apt_id || '') + '').trim() === id);
+  return (LOCAL_GUIDE || []).filter(r => {
+    const rid = ((r.apt_id || '') + '').trim();
+    return rid === id || rid.toUpperCase() === 'ALL';
+  });
+}
+
+// keep existing function name for compatibility (now includes ALL)
+function getLocalGuideRowsForApt(aptId) {
+  return getLocalGuideRowsForAptOrAll(aptId);
 }
 
 function detectNearestCategoryIntent(message) {
@@ -419,7 +432,14 @@ function detectNearestCategoryIntent(message) {
 function getNearestFromLocalGuide(aptId, category) {
   const rows = getLocalGuideRowsForApt(aptId).filter(r => normaliseCategory(r.category) === normaliseCategory(category));
   if (!rows.length) return null;
-  rows.sort((a, b) => distanceToMetres(a.distance) - distanceToMetres(b.distance));
+
+  rows.sort((a, b) => {
+    const aM = toNumber(a.sort_mins, Number.POSITIVE_INFINITY);
+    const bM = toNumber(b.sort_mins, Number.POSITIVE_INFINITY);
+    if (aM !== bM) return aM - bM;
+    return distanceToMetres(a.distance) - distanceToMetres(b.distance);
+  });
+
   return rows[0];
 }
 
@@ -440,8 +460,53 @@ function formatLocalGuideNearestReply(row, label) {
   return out.trim();
 }
 
+// LocalGuide list-by-category (NEW)
+function mapNearbyTypeToLocalGuideCategory(type) {
+  const t = (type || '').toLowerCase();
+  if (t === 'supermarket') return 'Supermarket';
+  if (t === 'atm') return 'ATM';
+  if (t === 'pharmacy') return 'Pharmacy';
+  if (t === 'cafe') return 'Cafe';
+  if (t === 'restaurant') return 'Restaurant';
+  if (t === 'tourist_attraction') return 'Attraction';
+  return null;
+}
+
+function getLocalGuideListByCategory(aptId, category, limit = 6) {
+  const rows = getLocalGuideRowsForAptOrAll(aptId)
+    .filter(r => normaliseCategory(r.category) === normaliseCategory(category));
+
+  if (!rows.length) return [];
+
+  rows.sort((a, b) => {
+    const aM = toNumber(a.sort_mins, Number.POSITIVE_INFINITY);
+    const bM = toNumber(b.sort_mins, Number.POSITIVE_INFINITY);
+    if (aM !== bM) return aM - bM;
+    return distanceToMetres(a.distance) - distanceToMetres(b.distance);
+  });
+
+  return rows.slice(0, limit);
+}
+
+function formatLocalGuideListReply(rows, label) {
+  if (!rows || rows.length === 0) return null;
+
+  const lines = rows.map(r => {
+    const name = (r.name || '').toString().trim() || 'Unknown';
+    const dist = (r.distance || '').toString().trim();
+    const link = (r.maps_link || '').toString().trim();
+
+    let line = `• ${name}`;
+    if (dist) line += ` — ${dist}`;
+    if (link) line += `\n  ${link}`;
+    return line;
+  });
+
+  return `Here are some nearby ${label}:\n\n${lines.join('\n\n')}`.trim();
+}
+
 // -------------------------------
-// Nearby intent (unchanged)
+// Nearby intent (unchanged detector)
 // -------------------------------
 function detectNearbyIntent(message) {
   const s = (message || '').toLowerCase();
@@ -809,9 +874,32 @@ app.post('/api/chat', async (req, res) => {
       });
     }
 
-    // 4) Google Places only if NOT preferFaq (or FAQ didn’t have it)
+    // 4) Nearby list intent (LocalGuide FIRST, then Google Places legacy fallback)
     const intent = detectNearbyIntent(message);
+
     if (intent && !preferFaq) {
+      const localGuideCategory = mapNearbyTypeToLocalGuideCategory(intent.type);
+
+      // LocalGuide list first (this fixes: "Any supermarkets nearby?" returning only SPAR)
+      if (localGuideCategory) {
+        const rows = getLocalGuideListByCategory(apt, localGuideCategory, 6);
+        const listReply = formatLocalGuideListReply(rows, intent.label);
+
+        if (listReply) {
+          let replyText = listReply;
+          if (userLang !== 'en') replyText = await translateText(replyText, userLang);
+
+          return res.json({
+            reply: replyText,
+            source: 'local_guide_list',
+            detected_language: userLang,
+            category: localGuideCategory,
+            results_count: rows.length
+          });
+        }
+      }
+
+      // Fall back to Google Places only if LocalGuide didn’t have entries
       const aptRow = getApartmentById(apt);
       const lat = aptRow?.lat;
       const lng = aptRow?.lng;
