@@ -55,21 +55,31 @@
       background-color: var(--yaka-dark);
     }
 
-    .wrap{
-      max-width: 920px;
-      margin: 0 auto;
-      padding: 18px 14px 22px;
-    }
+  .wrap{
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 18px 14px 22px;
+
+  /* NEW */
+  min-height: 100dvh;                 /* dynamic viewport height (better inside iframe) */
+  display: flex;
+}
 
     /* Slightly stronger glass so text stays readable on a colourful background */
     .card{
-      border-radius: 22px;
-      overflow: hidden;
-      border: 1px solid var(--card-border);
-      background: linear-gradient(180deg, rgba(22,22,22,0.92), rgba(22,22,22,0.78));
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(12px);
-    }
+  border-radius: 22px;
+  overflow: hidden;
+  border: 1px solid var(--card-border);
+  background: linear-gradient(180deg, rgba(22,22,22,0.86), rgba(22,22,22,0.72));
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+
+  /* NEW */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;                      /* critical for nested flex scrolling */
+}
 
     .header{
       padding: 22px 18px 14px;
@@ -184,18 +194,23 @@
       color: rgba(206,206,205,0.92);
     }
 
-    .chat{
-      padding: 16px 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      max-height: 60vh;
-      overflow-y: auto;
-      background:
-        radial-gradient(1000px 520px at 25% 0%, rgba(122,19,21,0.16), transparent 60%),
-        radial-gradient(900px 520px at 90% 10%, rgba(206,206,205,0.08), transparent 55%),
-        rgba(0,0,0,0.06);
-    }
+   .chat{
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  /* OLD: max-height: 60vh; overflow-y: auto; */
+  /* NEW */
+  flex: 1;                            /* fill remaining space */
+  min-height: 0;                      /* allow proper scroll area */
+  overflow-y: auto;
+
+  background:
+    radial-gradient(1000px 520px at 25% 0%, rgba(122,19,21,0.16), transparent 60%),
+    radial-gradient(900px 520px at 90% 10%, rgba(206,206,205,0.08), transparent 55%),
+    rgba(0,0,0,0.06);
+}
 
     .bubble{
       padding: 12px 14px;
@@ -316,6 +331,9 @@
     @media (max-width: 768px) {
       body { background-attachment: scroll; }
     }
+.input-area{
+  padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+}
   </style>
 </head>
 
